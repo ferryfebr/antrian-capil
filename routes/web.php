@@ -29,28 +29,48 @@ Route::get('/login', [AuthController::class, 'showLoginForm'])->name('login');
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
+// AJAX Routes for checking auth status
+Route::get('/api/auth/check', [AuthController::class, 'checkAuth'])->name('auth.check');
+Route::post('/api/auth/refresh', [AuthController::class, 'refreshSession'])->name('auth.refresh');
+
 // Protected Routes (Admin Only)
-Route::middleware(['auth:admin'])->group(function () {
+Route::middleware(['auth.admin'])->group(function () {
     
     // Dashboard
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    Route::get('/api/dashboard/realtime-stats', [DashboardController::class, 'getRealtimeStats'])->name('dashboard.realtime');
+    Route::get('/api/dashboard/queue-activity', [DashboardController::class, 'getQueueActivity'])->name('dashboard.activity');
+    Route::get('/api/dashboard/service-stats', [DashboardController::class, 'getServiceStats'])->name('dashboard.service-stats');
+    Route::get('/dashboard/export', [DashboardController::class, 'exportStats'])->name('dashboard.export');
     
     // Admin Management
     Route::resource('admin', AdminController::class);
+    Route::post('/admin/{admin}/change-password', [AdminController::class, 'changePassword'])->name('admin.change-password');
+    Route::get('/api/admin/{admin}/stats', [AdminController::class, 'getStats'])->name('admin.stats');
+    Route::patch('/admin/{admin}/toggle-status', [AdminController::class, 'toggleStatus'])->name('admin.toggle-status');
+    Route::get('/admin/export', [AdminController::class, 'export'])->name('admin.export');
+    Route::post('/admin/bulk-delete', [AdminController::class, 'bulkDelete'])->name('admin.bulk-delete');
     
     // Antrian Management
     Route::resource('antrian', AntrianController::class);
-    Route::patch('antrian/{antrian}/update-status', [AntrianController::class, 'updateStatus'])->name('antrian.update-status');
+    Route::patch('/antrian/{antrian}/update-status', [AntrianController::class, 'updateStatus'])->name('antrian.update-status');
+    Route::post('/api/antrian/call-next', [AntrianController::class, 'callNext'])->name('antrian.call-next');
+    Route::get('/api/antrian/current', [AntrianController::class, 'getCurrentQueue'])->name('antrian.current');
+    Route::get('/api/antrian/stats', [AntrianController::class, 'getStats'])->name('antrian.stats');
+    Route::get('/antrian/export', [AntrianController::class, 'export'])->name('antrian.export');
     
     // Layanan Management
     Route::resource('layanan', LayananController::class);
-    Route::patch('layanan/{layanan}/toggle-status', [LayananController::class, 'toggleStatus'])->name('layanan.toggle-status');
+    Route::patch('/layanan/{layanan}/toggle-status', [LayananController::class, 'toggleStatus'])->name('layanan.toggle-status');
+    Route::get('/api/layanan/{layanan}', [LayananController::class, 'getLayananData'])->name('layanan.data');
+    Route::post('/layanan/bulk-action', [LayananController::class, 'bulkAction'])->name('layanan.bulk-action');
+    Route::get('/layanan/export', [LayananController::class, 'export'])->name('layanan.export');
     
     // Loket Management
     Route::resource('loket', LoketController::class);
     
     // Pengunjung Management
-    Route::resource('pengunjung', PengunjungController::class);
+    Route::resource('pengunjung', PengunjungController::class)->except(['create', 'store', 'edit', 'update']);
     
 });
 
@@ -76,10 +96,17 @@ Route::prefix('api')->group(function () {
             'batal' => \App\Models\Antrian::whereDate('waktu_antrian', $today)->where('status_antrian', 'batal')->count(),
         ]);
     });
+    
+    // Helper API for next loket number
+    Route::get('/next-loket-number', function () {
+        $lastLoket = \App\Models\Loket::orderBy('id_loket', 'desc')->first();
+        $nextNumber = $lastLoket ? ($lastLoket->id_loket + 1) : 1;
+        return response()->json(['next_number' => $nextNumber]);
+    });
 });
 
 // Admin API Routes (authenticated)
-Route::prefix('api')->middleware(['auth:admin'])->group(function () {
+Route::prefix('api')->middleware(['auth.admin'])->group(function () {
     Route::get('/admin/antrian/today', function () {
         $antrians = \App\Models\Antrian::with(['pengunjung', 'layanan', 'admin'])
             ->whereDate('waktu_antrian', \Carbon\Carbon::today())
