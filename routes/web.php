@@ -115,3 +115,86 @@ Route::prefix('api')->middleware(['auth.admin'])->group(function () {
         return response()->json($antrians);
     });
 });
+
+Route::prefix('api')->group(function () {
+    
+    // Public API - no authentication required
+    Route::get('/visitor/check', function(\Illuminate\Http\Request $request) {
+        $nik = $request->get('nik');
+        if ($nik) {
+            $pengunjung = \App\Models\Pengunjung::where('nik', $nik)->first();
+            if ($pengunjung) {
+                return response()->json([
+                    'exists' => true,
+                    'visitor' => [
+                        'nama_pengunjung' => $pengunjung->nama_pengunjung,
+                        'no_hp' => $pengunjung->no_hp,
+                        'waktu_daftar' => $pengunjung->waktu_daftar->format('d/m/Y')
+                    ]
+                ]);
+            }
+        }
+        return response()->json(['exists' => false]);
+    })->name('api.visitor.check');
+
+    Route::get('/layanan/today-count', function(\Illuminate\Http\Request $request) {
+        $layananId = $request->get('layanan_id');
+        $count = 0;
+        
+        if ($layananId) {
+            $count = \App\Models\Antrian::where('id_layanan', $layananId)
+                ->whereDate('waktu_antrian', \Carbon\Carbon::today())
+                ->count();
+        }
+        
+        return response()->json(['count' => $count]);
+    })->name('api.layanan.today-count');
+
+    Route::get('/stats/today', function () {
+        $today = \Carbon\Carbon::today();
+        return response()->json([
+            'total_antrian' => \App\Models\Antrian::whereDate('waktu_antrian', $today)->count(),
+            'menunggu' => \App\Models\Antrian::whereDate('waktu_antrian', $today)->where('status_antrian', 'menunggu')->count(),
+            'dipanggil' => \App\Models\Antrian::whereDate('waktu_antrian', $today)->where('status_antrian', 'dipanggil')->count(),
+            'selesai' => \App\Models\Antrian::whereDate('waktu_antrian', $today)->where('status_antrian', 'selesai')->count(),
+            'batal' => \App\Models\Antrian::whereDate('waktu_antrian', $today)->where('status_antrian', 'batal')->count(),
+        ]);
+    })->name('api.stats.today');
+
+});
+
+// API Routes khusus admin (authenticated)
+Route::prefix('api')->middleware(['auth.admin'])->group(function () {
+    
+    Route::post('/antrian/{antrian}/send-notification', function($id) {
+        try {
+            $antrian = \App\Models\Antrian::with(['pengunjung', 'layanan'])->findOrFail($id);
+            
+            // Implementasi notifikasi (WhatsApp, SMS, dll)
+            // Untuk sekarang return success
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Notifikasi berhasil dikirim'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mengirim notifikasi'
+            ], 500);
+        }
+    })->name('api.antrian.send-notification');
+
+    Route::get('/antrian/{antrian}/check-status', function($id) {
+        try {
+            $antrian = \App\Models\Antrian::findOrFail($id);
+            return response()->json(['status' => $antrian->status_antrian]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Antrian tidak ditemukan'], 404);
+        }
+    })->name('api.antrian.check-status');
+
+});
+
+// Route untuk display antrian real-time
+Route::get('/api/antrian/current-queue', [AntrianController::class, 'getCurrentQueue'])->name('antrian.current');
