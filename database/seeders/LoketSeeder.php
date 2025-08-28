@@ -8,28 +8,25 @@ use Illuminate\Database\Seeder;
 
 class LoketSeeder extends Seeder
 {
-    /**
-     * Run the database seeds.
-     */
     public function run(): void
     {
         $loketData = [
             [
                 'nama_loket' => 'Loket 1',
                 'status_loket' => 'aktif',
-                'deskripsi_loket' => 'Loket untuk layanan KTP',
+                'deskripsi_loket' => 'Loket khusus untuk layanan KTP dan KK',
                 'id_layanan' => 1, // KTP
             ],
             [
-                'nama_loket' => 'Loket 2',
+                'nama_loket' => 'Loket 2', 
                 'status_loket' => 'aktif',
-                'deskripsi_loket' => 'Loket untuk layanan Kartu Keluarga',
+                'deskripsi_loket' => 'Loket khusus untuk layanan Kartu Keluarga',
                 'id_layanan' => 2, // KK
             ],
             [
                 'nama_loket' => 'Loket 3',
-                'status_loket' => 'aktif',
-                'deskripsi_loket' => 'Loket untuk layanan Kartu Identitas Anak',
+                'status_loket' => 'aktif', 
+                'deskripsi_loket' => 'Loket khusus untuk layanan KIA dan Akta',
                 'id_layanan' => 3, // KIA
             ],
             [
@@ -40,9 +37,27 @@ class LoketSeeder extends Seeder
             ],
             [
                 'nama_loket' => 'Loket 5',
-                'status_loket' => 'tidak_aktif',
-                'deskripsi_loket' => 'Loket untuk layanan Pencatatan Perkawinan',
+                'status_loket' => 'aktif',
+                'deskripsi_loket' => 'Loket VIP untuk layanan Perkawinan',
                 'id_layanan' => 5, // KAWIN
+            ],
+            [
+                'nama_loket' => 'Loket 6',
+                'status_loket' => 'tidak_aktif',
+                'deskripsi_loket' => 'Loket cadangan untuk masa sibuk',
+                'id_layanan' => null, // Umum
+            ],
+            [
+                'nama_loket' => 'Loket Informasi',
+                'status_loket' => 'aktif',
+                'deskripsi_loket' => 'Loket khusus untuk informasi dan konsultasi',
+                'id_layanan' => null, // Umum
+            ],
+            [
+                'nama_loket' => 'Loket Express',
+                'status_loket' => 'aktif', 
+                'deskripsi_loket' => 'Loket untuk layanan cepat seperti legalisir',
+                'id_layanan' => 8, // LEGAL
             ],
         ];
 

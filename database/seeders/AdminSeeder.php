@@ -9,24 +9,37 @@ use Illuminate\Support\Facades\Hash;
 
 class AdminSeeder extends Seeder
 {
-    /**
-     * Run the database seeds.
-     */
     public function run(): void
     {
+        // Super Admin
         Admin::create([
             'username' => 'admin',
-            'password' => Hash::make('password'), // atau gunakan bcrypt('password')
-            'nama_admin' => 'Administrator',
+            'password' => Hash::make('password'),
+            'nama_admin' => 'Super Administrator',
             'email' => 'admin@disdukcapil.go.id',
         ]);
 
-        // Tambahkan admin lain jika diperlukan
+        // Admin Operasional
         Admin::create([
-            'username' => 'admin2',
+            'username' => 'operator1',
             'password' => Hash::make('password123'),
-            'nama_admin' => 'Admin Kedua',
-            'email' => 'admin2@disdukcapil.go.id',
+            'nama_admin' => 'Operator Layanan 1',
+            'email' => 'operator1@disdukcapil.go.id',
+        ]);
+
+        Admin::create([
+            'username' => 'operator2',
+            'password' => Hash::make('password123'),
+            'nama_admin' => 'Operator Layanan 2',
+            'email' => 'operator2@disdukcapil.go.id',
+        ]);
+
+        // Admin Supervisor
+        Admin::create([
+            'username' => 'supervisor',
+            'password' => Hash::make('supervisor123'),
+            'nama_admin' => 'Supervisor Pelayanan',
+            'email' => 'supervisor@disdukcapil.go.id',
         ]);
     }
 }

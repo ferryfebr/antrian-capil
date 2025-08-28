@@ -8,18 +8,16 @@ use Illuminate\Database\Seeder;
 
 class LayananSeeder extends Seeder
 {
-    /**
-     * Run the database seeds.
-     */
     public function run(): void
     {
         $layananData = [
             [
-                'nama_layanan' => 'KTP',
+                'nama_layanan' => 'Kartu Tanda Penduduk (KTP)',
                 'kode_layanan' => 'KTP',
                 'estimasi_durasi_layanan' => 30,
                 'kapasitas_harian' => 40,
                 'aktif' => true,
+                'id_admin' => 2, // operator1
             ],
             [
                 'nama_layanan' => 'Kartu Keluarga',
@@ -27,6 +25,7 @@ class LayananSeeder extends Seeder
                 'estimasi_durasi_layanan' => 25,
                 'kapasitas_harian' => 35,
                 'aktif' => true,
+                'id_admin' => 2,
             ],
             [
                 'nama_layanan' => 'Kartu Identitas Anak',
@@ -34,6 +33,7 @@ class LayananSeeder extends Seeder
                 'estimasi_durasi_layanan' => 20,
                 'kapasitas_harian' => 30,
                 'aktif' => true,
+                'id_admin' => 3, // operator2
             ],
             [
                 'nama_layanan' => 'Akta Kelahiran',
@@ -41,6 +41,7 @@ class LayananSeeder extends Seeder
                 'estimasi_durasi_layanan' => 40,
                 'kapasitas_harian' => 25,
                 'aktif' => true,
+                'id_admin' => 3,
             ],
             [
                 'nama_layanan' => 'Pencatatan Perkawinan',
@@ -48,6 +49,7 @@ class LayananSeeder extends Seeder
                 'estimasi_durasi_layanan' => 45,
                 'kapasitas_harian' => 20,
                 'aktif' => true,
+                'id_admin' => 4, // supervisor
             ],
             [
                 'nama_layanan' => 'Akta Kematian',
@@ -55,6 +57,23 @@ class LayananSeeder extends Seeder
                 'estimasi_durasi_layanan' => 35,
                 'kapasitas_harian' => 15,
                 'aktif' => true,
+                'id_admin' => 4,
+            ],
+            [
+                'nama_layanan' => 'Surat Pindah',
+                'kode_layanan' => 'PINDAH',
+                'estimasi_durasi_layanan' => 30,
+                'kapasitas_harian' => 20,
+                'aktif' => true,
+                'id_admin' => 2,
+            ],
+            [
+                'nama_layanan' => 'Legalisir Dokumen',
+                'kode_layanan' => 'LEGAL',
+                'estimasi_durasi_layanan' => 15,
+                'kapasitas_harian' => 50,
+                'aktif' => true,
+                'id_admin' => 3,
             ],
         ];
 
