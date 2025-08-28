@@ -3,6 +3,11 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
+use Carbon\Carbon;
+use App\Models\Admin;
+use App\Models\Layanan;
+use App\Models\Pengunjung;
+use App\Models\Antrian;
 
 class DatabaseSeeder extends Seeder
 {

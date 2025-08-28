@@ -7,6 +7,7 @@ use App\Models\Admin;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 
 class AdminController extends Controller
@@ -93,7 +94,7 @@ class AdminController extends Controller
             ]);
 
             // Log activity
-            \Log::info('New admin created', [
+            Log::info('New admin created', [
                 'created_by' => Auth::guard('admin')->id(),
                 'new_admin_id' => $admin->id_admin,
                 'username' => $admin->username
@@ -103,7 +104,7 @@ class AdminController extends Controller
                 ->with('success', 'Admin baru berhasil ditambahkan!');
 
         } catch (\Exception $e) {
-            \Log::error('Failed to create admin', [
+            Log::error('Failed to create admin', [
                 'error' => $e->getMessage(),
                 'data' => $request->except('password')
             ]);
@@ -204,7 +205,7 @@ class AdminController extends Controller
             $admin->update($data);
 
             // Log activity
-            \Log::info('Admin updated', [
+            Log::info('Admin updated', [
                 'updated_by' => Auth::guard('admin')->id(),
                 'admin_id' => $admin->id_admin,
                 'changes' => $request->except(['password', 'password_confirmation'])
@@ -220,7 +221,7 @@ class AdminController extends Controller
             return redirect()->route('admin.index')->with('success', $message);
 
         } catch (\Exception $e) {
-            \Log::error('Failed to update admin', [
+            Log::error('Failed to update admin', [
                 'error' => $e->getMessage(),
                 'admin_id' => $id,
                 'data' => $request->except(['password', 'password_confirmation'])
@@ -255,7 +256,7 @@ class AdminController extends Controller
             $admin->delete();
 
             // Log activity
-            \Log::info('Admin deleted', [
+            Log::info('Admin deleted', [
                 'deleted_by' => Auth::guard('admin')->id(),
                 'deleted_admin_username' => $username,
                 'deleted_admin_id' => $id
@@ -265,7 +266,7 @@ class AdminController extends Controller
                 ->with('success', "Admin {$username} berhasil dihapus!");
 
         } catch (\Exception $e) {
-            \Log::error('Failed to delete admin', [
+            Log::error('Failed to delete admin', [
                 'error' => $e->getMessage(),
                 'admin_id' => $id
             ]);
@@ -300,7 +301,7 @@ class AdminController extends Controller
         try {
             $admin->update(['password' => Hash::make($request->new_password)]);
 
-            \Log::info('Admin password changed', [
+            Log::info('Admin password changed', [
                 'changed_by' => Auth::guard('admin')->id(),
                 'admin_id' => $admin->id_admin
             ]);
@@ -308,7 +309,7 @@ class AdminController extends Controller
             return response()->json(['success' => 'Password berhasil diubah']);
 
         } catch (\Exception $e) {
-            \Log::error('Failed to change admin password', [
+            Log::error('Failed to change admin password', [
                 'error' => $e->getMessage(),
                 'admin_id' => $id
             ]);
@@ -446,7 +447,7 @@ class AdminController extends Controller
             return back()->with($deleted > 0 ? 'success' : 'warning', $message);
 
         } catch (\Exception $e) {
-            \Log::error('Bulk delete admin failed', ['error' => $e->getMessage()]);
+            Log::error('Bulk delete admin failed', ['error' => $e->getMessage()]);
             return back()->with('error', 'Gagal melakukan penghapusan massal.');
         }
     }
