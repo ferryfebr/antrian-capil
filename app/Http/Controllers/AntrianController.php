@@ -9,7 +9,7 @@ use App\Models\Admin;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Log; // Pastikan ini ada
 use Carbon\Carbon;
 
 class AntrianController extends Controller
@@ -134,8 +134,8 @@ class AntrianController extends Controller
 
             DB::commit();
 
-            // Log activity
-            \Log::info('New queue created', [
+            // Log activity - FIXED: Gunakan Log facade yang sudah diimport
+            Log::info('New queue created', [
                 'antrian_id' => $antrian->id_antrian,
                 'nomor_antrian' => $nomorAntrian,
                 'pengunjung_nik' => $pengunjung->nik,
@@ -149,7 +149,8 @@ class AntrianController extends Controller
         } catch (\Exception $e) {
             DB::rollback();
             
-            \Log::error('Failed to create queue', [
+            // FIXED: Gunakan Log facade yang sudah diimport
+            Log::error('Failed to create queue', [
                 'error' => $e->getMessage(),
                 'data' => $request->except('password')
             ]);
@@ -301,8 +302,8 @@ class AntrianController extends Controller
                     return back()->with('error', 'Status tidak valid');
             }
 
-            // Log status change
-            \Log::info('Queue status updated', [
+            // Log status change - FIXED: Gunakan Log facade yang sudah diimport
+            Log::info('Queue status updated', [
                 'antrian_id' => $antrian->id_antrian,
                 'nomor_antrian' => $antrian->nomor_antrian,
                 'old_status' => $currentStatus,
@@ -313,7 +314,8 @@ class AntrianController extends Controller
             return back()->with('success', $message);
 
         } catch (\Exception $e) {
-            \Log::error('Failed to update queue status', [
+            // FIXED: Gunakan Log facade yang sudah diimport
+            Log::error('Failed to update queue status', [
                 'error' => $e->getMessage(),
                 'antrian_id' => $id,
                 'status' => $newStatus
@@ -334,7 +336,8 @@ class AntrianController extends Controller
             $nomorAntrian = $antrian->nomor_antrian;
             $antrian->delete();
 
-            \Log::info('Queue deleted', [
+            // FIXED: Gunakan Log facade yang sudah diimport
+            Log::info('Queue deleted', [
                 'antrian_id' => $id,
                 'nomor_antrian' => $nomorAntrian,
                 'deleted_by' => Auth::guard('admin')->id()
@@ -344,7 +347,8 @@ class AntrianController extends Controller
                 ->with('success', "Antrian {$nomorAntrian} berhasil dihapus!");
 
         } catch (\Exception $e) {
-            \Log::error('Failed to delete queue', [
+            // FIXED: Gunakan Log facade yang sudah diimport
+            Log::error('Failed to delete queue', [
                 'error' => $e->getMessage(),
                 'antrian_id' => $id
             ]);
