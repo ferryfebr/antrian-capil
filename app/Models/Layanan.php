@@ -174,30 +174,43 @@ class Layanan extends Model
 
         // Event saat layanan dibuat
         static::created(function ($layanan) {
-            \Log::info('Layanan created:', [
-                'id' => $layanan->id_layanan,
-                'nama' => $layanan->nama_layanan,
-                'kode' => $layanan->kode_layanan,
-                'aktif' => $layanan->aktif
-            ]);
+            try {
+                Log::info('Layanan created:', [
+                    'id' => $layanan->id_layanan,
+                    'nama' => $layanan->nama_layanan,
+                    'kode' => $layanan->kode_layanan,
+                    'aktif' => $layanan->aktif
+                ]);
+            } catch (\Exception $e) {
+                // Fallback logging jika Log facade bermasalah
+                error_log('Layanan created - ID: ' . $layanan->id_layanan . ', Nama: ' . $layanan->nama_layanan);
+            }
         });
 
         // Event saat layanan diupdate
         static::updated(function ($layanan) {
-            \Log::info('Layanan updated:', [
-                'id' => $layanan->id_layanan,
-                'nama' => $layanan->nama_layanan,
-                'aktif' => $layanan->aktif,
-                'changes' => $layanan->getChanges()
-            ]);
+            try {
+                Log::info('Layanan updated:', [
+                    'id' => $layanan->id_layanan,
+                    'nama' => $layanan->nama_layanan,
+                    'aktif' => $layanan->aktif,
+                    'changes' => $layanan->getChanges()
+                ]);
+            } catch (\Exception $e) {
+                error_log('Layanan updated - ID: ' . $layanan->id_layanan . ', Nama: ' . $layanan->nama_layanan);
+            }
         });
 
         // Event saat layanan dihapus
         static::deleted(function ($layanan) {
-            \Log::info('Layanan deleted:', [
-                'id' => $layanan->id_layanan,
-                'nama' => $layanan->nama_layanan
-            ]);
+            try {
+                Log::info('Layanan deleted:', [
+                    'id' => $layanan->id_layanan,
+                    'nama' => $layanan->nama_layanan
+                ]);
+            } catch (\Exception $e) {
+                error_log('Layanan deleted - ID: ' . $layanan->id_layanan . ', Nama: ' . $layanan->nama_layanan);
+            }
         });
     }
 }

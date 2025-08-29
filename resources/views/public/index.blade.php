@@ -120,6 +120,14 @@
             </div>
         </div>
 
+        <!-- Alert jika tidak ada layanan -->
+        @if($layanans->count() == 0)
+        <div class="alert alert-warning text-center">
+            <h4><i class="fas fa-exclamation-triangle me-2"></i>Tidak Ada Layanan Tersedia</h4>
+            <p>Saat ini tidak ada layanan yang aktif. Silakan hubungi petugas atau coba lagi nanti.</p>
+        </div>
+        @else
+
         <!-- Services Section -->
         <div id="services" class="mb-5">
             <div class="info-card text-center">
@@ -128,85 +136,40 @@
             </div>
 
             <div class="row g-4">
-                <!-- KTP -->
+                @foreach($layanans as $layanan)
                 <div class="col-lg-4 col-md-6">
-                    <div class="card service-card h-100 text-center p-4" onclick="selectService('KTP')">
+                    <div class="card service-card h-100 text-center p-4" onclick="selectService({{ $layanan->id_layanan }}, '{{ $layanan->nama_layanan }}', '{{ $layanan->kode_layanan }}')">
                         <div class="card-body">
                             <div class="service-icon">
-                                <i class="fas fa-id-card"></i>
+                                @php
+                                    $icon = 'fas fa-file-alt'; // default icon
+                                    if(str_contains(strtolower($layanan->kode_layanan), 'ktp')) {
+                                        $icon = 'fas fa-id-card';
+                                    } elseif(str_contains(strtolower($layanan->kode_layanan), 'kk')) {
+                                        $icon = 'fas fa-users';
+                                    } elseif(str_contains(strtolower($layanan->kode_layanan), 'kia')) {
+                                        $icon = 'fas fa-child';
+                                    } elseif(str_contains(strtolower($layanan->kode_layanan), 'akta')) {
+                                        $icon = 'fas fa-certificate';
+                                    } elseif(str_contains(strtolower($layanan->kode_layanan), 'kawin') || str_contains(strtolower($layanan->kode_layanan), 'nikah')) {
+                                        $icon = 'fas fa-heart';
+                                    }
+                                @endphp
+                                <i class="{{ $icon }}"></i>
                             </div>
-                            <h4 class="fw-bold mb-3">KTP</h4>
-                            <p class="text-muted">Kartu Tanda Penduduk</p>
+                            <h4 class="fw-bold mb-3">{{ $layanan->nama_layanan }}</h4>
+                            <p class="text-muted">Kode: {{ $layanan->kode_layanan }}</p>
+                            <small class="text-info">
+                                <i class="fas fa-clock me-1"></i>{{ $layanan->estimasi_durasi_layanan }} menit
+                                | <i class="fas fa-users me-1"></i>{{ $layanan->kapasitas_harian }} orang/hari
+                            </small>
                         </div>
                     </div>
                 </div>
-
-                <!-- Kartu Keluarga -->
-                <div class="col-lg-4 col-md-6">
-                    <div class="card service-card h-100 text-center p-4" onclick="selectService('KK')">
-                        <div class="card-body">
-                            <div class="service-icon">
-                                <i class="fas fa-users"></i>
-                            </div>
-                            <h4 class="fw-bold mb-3">Kartu Keluarga</h4>
-                            <p class="text-muted">Kartu Keluarga</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- KIA -->
-                <div class="col-lg-4 col-md-6">
-                    <div class="card service-card h-100 text-center p-4" onclick="selectService('KIA')">
-                        <div class="card-body">
-                            <div class="service-icon">
-                                <i class="fas fa-child"></i>
-                            </div>
-                            <h4 class="fw-bold mb-3">Kartu Identitas Anak</h4>
-                            <p class="text-muted">KIA untuk anak dibawah 17 tahun</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Akta Kelahiran -->
-                <div class="col-lg-4 col-md-6">
-                    <div class="card service-card h-100 text-center p-4" onclick="selectService('AKTA')">
-                        <div class="card-body">
-                            <div class="service-icon">
-                                <i class="fas fa-certificate"></i>
-                            </div>
-                            <h4 class="fw-bold mb-3">Akta Kelahiran</h4>
-                            <p class="text-muted">Surat keterangan kelahiran</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Pencatatan Perkawinan -->
-                <div class="col-lg-4 col-md-6">
-                    <div class="card service-card h-100 text-center p-4" onclick="selectService('KAWIN')">
-                        <div class="card-body">
-                            <div class="service-icon">
-                                <i class="fas fa-heart"></i>
-                            </div>
-                            <h4 class="fw-bold mb-3">Pencatatan Perkawinan</h4>
-                            <p class="text-muted">Surat nikah dan perkawinan</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Akta Kematian -->
-                <div class="col-lg-4 col-md-6">
-                    <div class="card service-card h-100 text-center p-4" onclick="selectService('MATI')">
-                        <div class="card-body">
-                            <div class="service-icon">
-                                <i class="fas fa-file-alt"></i>
-                            </div>
-                            <h4 class="fw-bold mb-3">Akta Kematian</h4>
-                            <p class="text-muted">Surat keterangan kematian</p>
-                        </div>
-                    </div>
-                </div>
+                @endforeach
             </div>
         </div>
+        @endif
     </div>
 
     <!-- Modal Form Antrian -->
@@ -220,6 +183,28 @@
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
+                    @if(session('success'))
+                        <div class="alert alert-success">
+                            <i class="fas fa-check-circle me-2"></i>{{ session('success') }}
+                        </div>
+                    @endif
+
+                    @if(session('error'))
+                        <div class="alert alert-danger">
+                            <i class="fas fa-exclamation-circle me-2"></i>{{ session('error') }}
+                        </div>
+                    @endif
+
+                    @if($errors->any())
+                        <div class="alert alert-danger">
+                            <ul class="mb-0">
+                                @foreach($errors->all() as $error)
+                                    <li>{{ $error }}</li>
+                                @endforeach
+                            </ul>
+                        </div>
+                    @endif
+
                     <form id="queueForm" action="{{ route('public.queue.store') }}" method="POST">
                         @csrf
                         <input type="hidden" id="selectedService" name="id_layanan">
@@ -232,25 +217,39 @@
                         <div class="row mb-3">
                             <div class="col-md-6">
                                 <label for="nik" class="form-label">NIK <span class="text-danger">*</span></label>
-                                <input type="text" class="form-control" id="nik" name="nik" required maxlength="16" 
+                                <input type="text" class="form-control @error('nik') is-invalid @enderror" id="nik" name="nik" 
+                                       value="{{ old('nik') }}" required maxlength="16" 
                                        placeholder="16 digit NIK" oninput="this.value = this.value.replace(/[^0-9]/g, '').slice(0, 16)">
+                                @error('nik')
+                                    <div class="invalid-feedback">{{ $message }}</div>
+                                @enderror
                             </div>
                             <div class="col-md-6">
                                 <label for="nama" class="form-label">Nama Lengkap <span class="text-danger">*</span></label>
-                                <input type="text" class="form-control" id="nama" name="nama_pengunjung" required maxlength="100">
+                                <input type="text" class="form-control @error('nama_pengunjung') is-invalid @enderror" id="nama" 
+                                       name="nama_pengunjung" value="{{ old('nama_pengunjung') }}" required maxlength="100"
+                                       placeholder="Nama sesuai KTP">
+                                @error('nama_pengunjung')
+                                    <div class="invalid-feedback">{{ $message }}</div>
+                                @enderror
                             </div>
                         </div>
 
                         <div class="row mb-3">
                             <div class="col-md-6">
-                                <label for="no_hp" class="form-label">No. HP</label>
-                                <input type="text" class="form-control" id="no_hp" name="no_hp" maxlength="15" 
+                                <label for="no_hp" class="form-label">No. HP (Opsional)</label>
+                                <input type="text" class="form-control @error('no_hp') is-invalid @enderror" id="no_hp" 
+                                       name="no_hp" value="{{ old('no_hp') }}" maxlength="15" 
                                        placeholder="081234567890" oninput="this.value = this.value.replace(/[^0-9+]/g, '').slice(0, 15)">
+                                @error('no_hp')
+                                    <div class="invalid-feedback">{{ $message }}</div>
+                                @enderror
+                                <div class="form-text">Untuk notifikasi status antrian</div>
                             </div>
                         </div>
 
                         <div class="d-grid">
-                            <button type="submit" class="btn btn-danger btn-lg">
+                            <button type="submit" class="btn btn-danger btn-lg" id="submitBtn">
                                 <i class="fas fa-ticket-alt me-2"></i>Ambil Nomor Antrian
                             </button>
                         </div>
@@ -264,33 +263,66 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
     <script>
-        const services = {
-            'KTP': { id: 1, name: 'KTP (Kartu Tanda Penduduk)' },
-            'KK': { id: 2, name: 'Kartu Keluarga' },
-            'KIA': { id: 3, name: 'Kartu Identitas Anak' },
-            'AKTA': { id: 4, name: 'Akta Kelahiran' },
-            'KAWIN': { id: 5, name: 'Pencatatan Perkawinan' },
-            'MATI': { id: 6, name: 'Akta Kematian' }
-        };
-
-        function selectService(serviceCode) {
-            const service = services[serviceCode];
-            document.getElementById('selectedService').value = service.id;
-            document.getElementById('serviceName').textContent = service.name;
+        function selectService(id, name, code) {
+            document.getElementById('selectedService').value = id;
+            document.getElementById('serviceName').textContent = name + ' (' + code + ')';
             
             const modal = new bootstrap.Modal(document.getElementById('formModal'));
             modal.show();
         }
 
-        // Validate NIK length
+        // Validate NIK length dan form
         document.getElementById('queueForm').addEventListener('submit', function(e) {
             const nik = document.getElementById('nik').value;
+            const nama = document.getElementById('nama').value.trim();
+            const layanan = document.getElementById('selectedService').value;
+
+            let errors = [];
+
             if (nik.length !== 16) {
+                errors.push('NIK harus 16 digit!');
+            }
+
+            if (nama.length < 3) {
+                errors.push('Nama minimal 3 karakter!');
+            }
+
+            if (!layanan) {
+                errors.push('Pilih layanan terlebih dahulu!');
+            }
+
+            if (errors.length > 0) {
                 e.preventDefault();
-                alert('NIK harus 16 digit!');
+                alert('Error:\n- ' + errors.join('\n- '));
                 return false;
             }
+
+            // Show loading state
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Memproses...';
+            submitBtn.disabled = true;
         });
+
+        // Show modal if there are validation errors
+        @if($errors->any() || session('error'))
+            document.addEventListener('DOMContentLoaded', function() {
+                const modal = new bootstrap.Modal(document.getElementById('formModal'));
+                modal.show();
+            });
+        @endif
+
+        // Auto-show success message and redirect to ticket if success
+        @if(session('success'))
+            document.addEventListener('DOMContentLoaded', function() {
+                // If there's a success message, it means queue was created but redirect failed
+                // Let's try to find the latest queue for this session
+                setTimeout(function() {
+                    alert('{{ session('success') }}');
+                    // Redirect to main page since we can't determine the ticket ID
+                    window.location.reload();
+                }, 2000);
+            });
+        @endif
     </script>
 </body>
 </html>

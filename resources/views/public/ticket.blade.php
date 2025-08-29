@@ -178,7 +178,7 @@
                     <span class="info-label">
                         <i class="fas fa-clock me-2 text-primary"></i>Waktu Antri
                     </span>
-                    <span class="info-value">{{ $antrian->waktu_antrian->format('d/m/Y H:i') }}</span>
+                    <span class="info-value">{{ Carbon\Carbon::parse($antrian->waktu_antrian)->format('d/m/Y H:i') }}</span>
                 </div>
                 
                 @if($antrian->waktu_estimasi)
@@ -186,7 +186,7 @@
                     <span class="info-label">
                         <i class="fas fa-hourglass-half me-2 text-warning"></i>Estimasi
                     </span>
-                    <span class="info-value">{{ $antrian->waktu_estimasi->format('H:i') }}</span>
+                    <span class="info-value">{{ Carbon\Carbon::parse($antrian->waktu_estimasi)->format('H:i') }}</span>
                 </div>
                 @endif
                 

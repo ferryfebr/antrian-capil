@@ -15,21 +15,23 @@ class Antrian extends Model
 
     protected $fillable = [
         'nomor_antrian',
-        'waktu_antrian',
-        'status_antrian',
-        'waktu_estimasi',
-        'waktu_dipanggil',
-        'id_admin',
         'id_pengunjung',
         'id_layanan',
+        'waktu_antrian',
+        'waktu_estimasi',
+        'status_antrian'
+    ];
+
+    protected $dates = [
+        'waktu_antrian',
+        'waktu_estimasi',
+        'created_at',
+        'updated_at'
     ];
 
     protected $casts = [
         'waktu_antrian' => 'datetime',
-        'waktu_estimasi' => 'datetime',
-        'waktu_dipanggil' => 'datetime',
-        'created_at' => 'datetime',
-        'updated_at' => 'datetime',
+        'waktu_estimasi' => 'datetime'
     ];
 
     /**

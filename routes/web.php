@@ -196,4 +196,18 @@ Route::prefix('api')->middleware(['auth.admin'])->group(function () {
 
 });
 
-// REMOVED: Duplicate route at the end - sudah digabung ke atas
+// Add this near the public routes section
+Route::get('/debug-queue', function() {
+    $routes = Route::getRoutes();
+    $queueRoutes = [];
+    foreach ($routes as $route) {
+        if (str_contains($route->uri, 'queue') || str_contains($route->uri, 'tiket')) {
+            $queueRoutes[] = [
+                'uri' => $route->uri,
+                'methods' => $route->methods,
+                'name' => $route->getName()
+            ];
+        }
+    }
+    return response()->json($queueRoutes);
+});
