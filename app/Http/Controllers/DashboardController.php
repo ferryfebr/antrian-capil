@@ -17,7 +17,7 @@ class DashboardController extends Controller
     public function index()
     {
         try {
-            // Basic statistics
+            // Basic statistics dengan error handling
             $stats = $this->getTodayStats();
             
             // Growth data (comparison with yesterday)
@@ -41,12 +41,17 @@ class DashboardController extends Controller
             // Hourly data for charts
             $hourly_data = $this->getHourlyData();
 
-            // Log untuk debugging
-            Log::info('Dashboard data loaded:', [
-                'total_layanan' => Layanan::count(),
-                'layanan_aktif' => Layanan::where('aktif', true)->count(),
-                'layanan_populer_count' => $layanan_populer->count()
-            ]);
+            // Log untuk debugging dengan lebih aman
+            try {
+                Log::info('Dashboard data loaded successfully:', [
+                    'total_layanan' => Layanan::count(),
+                    'layanan_aktif' => Layanan::where('aktif', true)->count(),
+                    'layanan_populer_count' => $layanan_populer->count(),
+                    'stats' => $stats
+                ]);
+            } catch (\Exception $logError) {
+                // Jika logging error, lanjutkan tanpa log
+            }
 
             return view('dashboard.index', compact(
                 'stats',
@@ -60,9 +65,13 @@ class DashboardController extends Controller
             ));
 
         } catch (\Exception $e) {
-            Log::error('Dashboard error: ' . $e->getMessage());
+            Log::error('Dashboard error: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+                'line' => $e->getLine(),
+                'file' => $e->getFile()
+            ]);
             
-            // Return dashboard with minimal data if error occurs
+            // Return dashboard dengan data fallback
             return view('dashboard.index', [
                 'stats' => $this->getMinimalStats(),
                 'growth' => ['total_growth' => 0, 'completed_growth' => 0],
@@ -72,133 +81,203 @@ class DashboardController extends Controller
                 'service_efficiency' => collect(),
                 'active_lokets' => collect(),
                 'hourly_data' => []
-            ]);
+            ])->with('error', 'Terjadi kesalahan saat memuat dashboard. Beberapa data mungkin tidak tersedia.');
         }
     }
 
     private function getTodayStats()
     {
-        $today = Carbon::today();
+        try {
+            $today = Carbon::today();
 
-        return [
-            'total_antrian_hari_ini' => Antrian::whereDate('waktu_antrian', $today)->count(),
-            'antrian_menunggu' => Antrian::whereDate('waktu_antrian', $today)
-                ->where('status_antrian', 'menunggu')->count(),
-            'antrian_dipanggil' => Antrian::whereDate('waktu_antrian', $today)
-                ->where('status_antrian', 'dipanggil')->count(),
-            'antrian_selesai' => Antrian::whereDate('waktu_antrian', $today)
-                ->where('status_antrian', 'selesai')->count(),
-        ];
+            return [
+                'total_antrian_hari_ini' => Antrian::whereDate('waktu_antrian', $today)->count(),
+                'antrian_menunggu' => Antrian::whereDate('waktu_antrian', $today)
+                    ->where('status_antrian', 'menunggu')->count(),
+                'antrian_dipanggil' => Antrian::whereDate('waktu_antrian', $today)
+                    ->where('status_antrian', 'dipanggil')->count(),
+                'antrian_selesai' => Antrian::whereDate('waktu_antrian', $today)
+                    ->where('status_antrian', 'selesai')->count(),
+            ];
+        } catch (\Exception $e) {
+            Log::warning('Error getting today stats: ' . $e->getMessage());
+            return $this->getMinimalStats();
+        }
     }
 
     private function getGrowthData()
     {
-        $today = Carbon::today();
-        $yesterday = Carbon::yesterday();
+        try {
+            $today = Carbon::today();
+            $yesterday = Carbon::yesterday();
 
-        $todayTotal = Antrian::whereDate('waktu_antrian', $today)->count();
-        $yesterdayTotal = Antrian::whereDate('waktu_antrian', $yesterday)->count();
+            $todayTotal = Antrian::whereDate('waktu_antrian', $today)->count();
+            $yesterdayTotal = Antrian::whereDate('waktu_antrian', $yesterday)->count();
 
-        $todayCompleted = Antrian::whereDate('waktu_antrian', $today)
-            ->where('status_antrian', 'selesai')->count();
-        $yesterdayCompleted = Antrian::whereDate('waktu_antrian', $yesterday)
-            ->where('status_antrian', 'selesai')->count();
+            $todayCompleted = Antrian::whereDate('waktu_antrian', $today)
+                ->where('status_antrian', 'selesai')->count();
+            $yesterdayCompleted = Antrian::whereDate('waktu_antrian', $yesterday)
+                ->where('status_antrian', 'selesai')->count();
 
-        return [
-            'total_growth' => $yesterdayTotal > 0 
-                ? round((($todayTotal - $yesterdayTotal) / $yesterdayTotal) * 100, 1)
-                : 0,
-            'completed_growth' => $yesterdayCompleted > 0 
-                ? round((($todayCompleted - $yesterdayCompleted) / $yesterdayCompleted) * 100, 1)
-                : 0
-        ];
+            return [
+                'total_growth' => $yesterdayTotal > 0 
+                    ? round((($todayTotal - $yesterdayTotal) / $yesterdayTotal) * 100, 1)
+                    : 0,
+                'completed_growth' => $yesterdayCompleted > 0 
+                    ? round((($todayCompleted - $yesterdayCompleted) / $yesterdayCompleted) * 100, 1)
+                    : 0
+            ];
+        } catch (\Exception $e) {
+            Log::warning('Error getting growth data: ' . $e->getMessage());
+            return ['total_growth' => 0, 'completed_growth' => 0];
+        }
     }
 
     private function getCurrentQueue()
     {
-        return Antrian::with(['pengunjung', 'layanan'])
-            ->where('status_antrian', 'dipanggil')
-            ->whereDate('waktu_antrian', Carbon::today())
-            ->latest('waktu_dipanggil')
-            ->first();
+        try {
+            return Antrian::with(['pengunjung', 'layanan'])
+                ->where('status_antrian', 'dipanggil')
+                ->whereDate('waktu_antrian', Carbon::today())
+                ->latest('waktu_dipanggil')
+                ->first();
+        } catch (\Exception $e) {
+            Log::warning('Error getting current queue: ' . $e->getMessage());
+            return null;
+        }
     }
 
     private function getRecentActivities()
     {
-        return Antrian::with(['pengunjung', 'layanan', 'admin'])
-            ->whereDate('waktu_antrian', Carbon::today())
-            ->orderBy('waktu_antrian', 'desc')
-            ->limit(10)
-            ->get();
+        try {
+            return Antrian::with(['pengunjung', 'layanan', 'admin'])
+                ->whereDate('waktu_antrian', Carbon::today())
+                ->orderBy('waktu_antrian', 'desc')
+                ->limit(10)
+                ->get();
+        } catch (\Exception $e) {
+            Log::warning('Error getting recent activities: ' . $e->getMessage());
+            return collect();
+        }
     }
 
     private function getPopularServices()
     {
-        // PERBAIKAN: Pastikan hanya mengambil layanan aktif
-        return Layanan::withCount(['antrian' => function($query) {
-                $query->whereDate('waktu_antrian', Carbon::today());
-            }])
-            ->where('aktif', true) // PENTING: Hanya layanan aktif
-            ->having('antrian_count', '>', 0) // Hanya yang ada antriannya
-            ->orderBy('antrian_count', 'desc')
-            ->limit(5)
-            ->get();
+        try {
+            // PERBAIKAN: Lebih defensive dengan null checking
+            $services = Layanan::withCount(['antrian' => function($query) {
+                    $query->whereDate('waktu_antrian', Carbon::today());
+                }])
+                ->where('aktif', true)
+                ->having('antrian_count', '>', 0)
+                ->orderBy('antrian_count', 'desc')
+                ->limit(5)
+                ->get();
+
+            // Pastikan data tidak corrupt
+            return $services->filter(function($layanan) {
+                return $layanan && $layanan->nama_layanan && $layanan->kode_layanan;
+            });
+
+        } catch (\Exception $e) {
+            Log::warning('Error getting popular services: ' . $e->getMessage());
+            return collect();
+        }
     }
 
     private function getServiceEfficiency()
     {
-        // PERBAIKAN: Hanya layanan aktif
-        return Layanan::with(['antrian' => function($query) {
-                $query->whereDate('waktu_antrian', Carbon::today());
-            }])
-            ->where('aktif', true) // PENTING: Hanya layanan aktif
-            ->get()
-            ->map(function($layanan) {
-                $totalToday = $layanan->antrian->count();
-                $completedToday = $layanan->antrian->where('status_antrian', 'selesai')->count();
-                
-                return [
-                    'layanan' => $layanan,
-                    'total_today' => $totalToday,
-                    'completed_today' => $completedToday,
-                    'utilization_rate' => $layanan->kapasitas_harian > 0 
-                        ? round(($totalToday / $layanan->kapasitas_harian) * 100, 1)
-                        : 0
-                ];
-            })
-            ->sortByDesc('utilization_rate')
-            ->values();
+        try {
+            $services = Layanan::with(['antrian' => function($query) {
+                    $query->whereDate('waktu_antrian', Carbon::today());
+                }])
+                ->where('aktif', true)
+                ->get()
+                ->map(function($layanan) {
+                    try {
+                        // Defensive programming - check if antrian exists
+                        $antrianCollection = $layanan->antrian ?? collect();
+                        $totalToday = $antrianCollection->count();
+                        $completedToday = $antrianCollection->where('status_antrian', 'selesai')->count();
+                        
+                        return [
+                            'layanan' => $layanan,
+                            'total_today' => $totalToday,
+                            'completed_today' => $completedToday,
+                            'utilization_rate' => ($layanan->kapasitas_harian ?? 1) > 0 
+                                ? round(($totalToday / $layanan->kapasitas_harian) * 100, 1)
+                                : 0
+                        ];
+                    } catch (\Exception $e) {
+                        Log::warning('Error processing service efficiency for layanan ID: ' . ($layanan->id_layanan ?? 'unknown'));
+                        return [
+                            'layanan' => $layanan,
+                            'total_today' => 0,
+                            'completed_today' => 0,
+                            'utilization_rate' => 0
+                        ];
+                    }
+                })
+                ->sortByDesc('utilization_rate')
+                ->values();
+
+            return $services;
+
+        } catch (\Exception $e) {
+            Log::warning('Error getting service efficiency: ' . $e->getMessage());
+            return collect();
+        }
     }
 
     private function getActiveLokets()
     {
-        return Loket::with('layanan')
-            ->where('status_loket', 'aktif')
-            ->orderBy('nama_loket')
-            ->get();
+        try {
+            return Loket::with('layanan')
+                ->where('status_loket', 'aktif')
+                ->orderBy('nama_loket')
+                ->get();
+        } catch (\Exception $e) {
+            Log::warning('Error getting active lokets: ' . $e->getMessage());
+            return collect();
+        }
     }
 
     private function getHourlyData()
     {
-        $today = Carbon::today();
-        $data = [];
+        try {
+            $today = Carbon::today();
+            $data = [];
 
-        for ($hour = 8; $hour <= 17; $hour++) {
-            $startHour = $today->copy()->setHour($hour)->setMinute(0)->setSecond(0);
-            $endHour = $startHour->copy()->addHour();
+            for ($hour = 8; $hour <= 17; $hour++) {
+                try {
+                    $startHour = $today->copy()->setHour($hour)->setMinute(0)->setSecond(0);
+                    $endHour = $startHour->copy()->addHour();
 
-            $total = Antrian::whereBetween('waktu_antrian', [$startHour, $endHour])->count();
-            $completed = Antrian::whereBetween('waktu_antrian', [$startHour, $endHour])
-                ->where('status_antrian', 'selesai')->count();
+                    $total = Antrian::whereBetween('waktu_antrian', [$startHour, $endHour])->count();
+                    $completed = Antrian::whereBetween('waktu_antrian', [$startHour, $endHour])
+                        ->where('status_antrian', 'selesai')->count();
 
-            $data[] = [
-                'hour' => sprintf('%02d:00', $hour),
-                'total' => $total,
-                'completed' => $completed
-            ];
+                    $data[] = [
+                        'hour' => sprintf('%02d:00', $hour),
+                        'total' => $total,
+                        'completed' => $completed
+                    ];
+                } catch (\Exception $e) {
+                    // Skip jam ini jika error
+                    Log::warning("Error getting hourly data for hour {$hour}: " . $e->getMessage());
+                    $data[] = [
+                        'hour' => sprintf('%02d:00', $hour),
+                        'total' => 0,
+                        'completed' => 0
+                    ];
+                }
+            }
+
+            return $data;
+        } catch (\Exception $e) {
+            Log::warning('Error getting hourly data: ' . $e->getMessage());
+            return [];
         }
-
-        return $data;
     }
 
     private function getMinimalStats()
@@ -218,6 +297,7 @@ class DashboardController extends Controller
             $currentQueue = $this->getCurrentQueue();
 
             return response()->json([
+                'success' => true,
                 'stats' => $stats,
                 'current_queue' => $currentQueue
             ]);
@@ -226,6 +306,8 @@ class DashboardController extends Controller
             Log::error('Realtime stats error: ' . $e->getMessage());
             
             return response()->json([
+                'success' => false,
+                'error' => 'Error loading realtime stats',
                 'stats' => $this->getMinimalStats(),
                 'current_queue' => null
             ], 500);
@@ -236,11 +318,18 @@ class DashboardController extends Controller
     {
         try {
             $activities = $this->getRecentActivities();
-            return response()->json($activities);
+            return response()->json([
+                'success' => true,
+                'activities' => $activities
+            ]);
 
         } catch (\Exception $e) {
             Log::error('Queue activity error: ' . $e->getMessage());
-            return response()->json([], 500);
+            return response()->json([
+                'success' => false,
+                'error' => 'Error loading queue activities',
+                'activities' => []
+            ], 500);
         }
     }
 
@@ -251,6 +340,7 @@ class DashboardController extends Controller
             $service_efficiency = $this->getServiceEfficiency();
 
             return response()->json([
+                'success' => true,
                 'popular_services' => $layanan_populer,
                 'service_efficiency' => $service_efficiency
             ]);
@@ -258,6 +348,8 @@ class DashboardController extends Controller
         } catch (\Exception $e) {
             Log::error('Service stats error: ' . $e->getMessage());
             return response()->json([
+                'success' => false,
+                'error' => 'Error loading service stats',
                 'popular_services' => [],
                 'service_efficiency' => []
             ], 500);
@@ -266,7 +358,18 @@ class DashboardController extends Controller
 
     public function exportStats()
     {
-        // Export functionality
-        return response()->json(['message' => 'Export feature coming soon']);
+        try {
+            // Export functionality
+            return response()->json([
+                'success' => true, 
+                'message' => 'Export feature coming soon'
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Export stats error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'error' => 'Export failed'
+            ], 500);
+        }
     }
 }
