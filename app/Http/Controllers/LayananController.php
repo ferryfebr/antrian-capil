@@ -2,111 +2,104 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Controllers\Controller;
 use App\Models\Layanan;
 use App\Models\Admin;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
 
 class LayananController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
-    public function index(Request $request)
+    public function index()
     {
-        $query = Layanan::with('admin');
+        $layanans = Layanan::with(['admin'])
+            ->withCount('antrian')
+            ->when(request('search'), function($query) {
+                $query->where('nama_layanan', 'like', '%' . request('search') . '%')
+                      ->orWhere('kode_layanan', 'like', '%' . request('search') . '%');
+            })
+            ->when(request('status'), function($query) {
+                if (request('status') == 'aktif') {
+                    $query->where('aktif', true);
+                } elseif (request('status') == 'tidak_aktif') {
+                    $query->where('aktif', false);
+                }
+            })
+            ->orderBy('created_at', 'desc')
+            ->paginate(10);
 
-        // Filter berdasarkan status aktif
-        if ($request->filled('status')) {
-            if ($request->status == 'aktif') {
-                $query->where('aktif', true);
-            } elseif ($request->status == 'tidak_aktif') {
-                $query->where('aktif', false);
-            }
-        }
-
-        // Search functionality
-        if ($request->filled('search')) {
-            $search = $request->search;
-            $query->where(function($q) use ($search) {
-                $q->where('nama_layanan', 'like', "%{$search}%")
-                  ->orWhere('kode_layanan', 'like', "%{$search}%");
-            });
-        }
-
-        $layanans = $query->orderBy('created_at', 'desc')->paginate(10);
-        
         return view('layanan.index', compact('layanans'));
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
     public function create()
     {
-        $admins = Admin::all();
+        $admins = Admin::orderBy('nama_admin', 'asc')->get();
         return view('layanan.create', compact('admins'));
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
     public function store(Request $request)
     {
         $request->validate([
-            'nama_layanan' => 'required|max:100|unique:layanan,nama_layanan',
-            'kode_layanan' => 'required|max:10|unique:layanan,kode_layanan',
+            'nama_layanan' => 'required|string|max:100',
+            'kode_layanan' => 'required|string|max:10|unique:layanan,kode_layanan',
             'estimasi_durasi_layanan' => 'required|integer|min:1|max:999',
             'kapasitas_harian' => 'required|integer|min:1|max:999',
-            'aktif' => 'boolean',
-            'id_admin' => 'nullable|exists:admin,id_admin'
-        ], [
-            'nama_layanan.required' => 'Nama layanan wajib diisi',
-            'nama_layanan.unique' => 'Nama layanan sudah ada',
-            'kode_layanan.required' => 'Kode layanan wajib diisi',
-            'kode_layanan.unique' => 'Kode layanan sudah digunakan',
-            'estimasi_durasi_layanan.required' => 'Estimasi durasi layanan wajib diisi',
-            'estimasi_durasi_layanan.integer' => 'Estimasi durasi harus berupa angka',
-            'estimasi_durasi_layanan.min' => 'Estimasi durasi minimal 1 menit',
-            'kapasitas_harian.required' => 'Kapasitas harian wajib diisi',
-            'kapasitas_harian.integer' => 'Kapasitas harian harus berupa angka',
+            'id_admin' => 'nullable|exists:admin,id_admin',
         ]);
 
-        Layanan::create([
-            'nama_layanan' => $request->nama_layanan,
-            'kode_layanan' => strtoupper($request->kode_layanan),
-            'estimasi_durasi_layanan' => $request->estimasi_durasi_layanan,
-            'kapasitas_harian' => $request->kapasitas_harian,
-            'aktif' => $request->has('aktif') ? true : false,
-            'id_admin' => $request->id_admin,
-        ]);
+        try {
+            $layanan = new Layanan();
+            $layanan->nama_layanan = trim($request->nama_layanan);
+            $layanan->kode_layanan = strtoupper(trim($request->kode_layanan));
+            $layanan->estimasi_durasi_layanan = $request->estimasi_durasi_layanan;
+            $layanan->kapasitas_harian = $request->kapasitas_harian;
+            $layanan->id_admin = $request->id_admin;
+            
+            // PENTING: Set status aktif berdasarkan checkbox
+            $layanan->aktif = $request->has('aktif') ? 1 : 0;
+            
+            $layanan->save();
 
-        return redirect()->route('layanan.index')->with('success', 'Layanan berhasil ditambahkan!');
+            // Clear cache untuk refresh data
+            $this->clearLayananCache();
+
+            // Log untuk debugging
+            Log::info('Layanan baru ditambahkan: ', [
+                'id' => $layanan->id_layanan,
+                'nama' => $layanan->nama_layanan,
+                'kode' => $layanan->kode_layanan,
+                'aktif' => $layanan->aktif
+            ]);
+
+            return redirect()->route('layanan.index')
+                ->with('success', 'Layanan "' . $layanan->nama_layanan . '" berhasil ditambahkan');
+
+        } catch (\Exception $e) {
+            Log::error('Error creating layanan: ' . $e->getMessage());
+            
+            return back()->withInput()
+                ->with('error', 'Gagal menambahkan layanan: ' . $e->getMessage());
+        }
     }
 
-    /**
-     * Display the specified resource.
-     */
-    public function show($id)
+    public function show(Layanan $layanan)
     {
-        $layanan = Layanan::with(['admin', 'loket', 'antrian.pengunjung'])->findOrFail($id);
+        $layanan->load(['admin', 'antrian.pengunjung', 'loket']);
         
         // Statistik layanan
-        $today = \Carbon\Carbon::today();
         $stats = [
-            'total_antrian_hari_ini' => $layanan->antrian()->whereDate('waktu_antrian', $today)->count(),
-            'antrian_menunggu' => $layanan->antrian()->whereDate('waktu_antrian', $today)->where('status_antrian', 'menunggu')->count(),
-            'antrian_selesai' => $layanan->antrian()->whereDate('waktu_antrian', $today)->where('status_antrian', 'selesai')->count(),
-            'antrian_batal' => $layanan->antrian()->whereDate('waktu_antrian', $today)->where('status_antrian', 'batal')->count(),
+            'total_antrian_hari_ini' => $layanan->antrian()->whereDate('waktu_antrian', today())->count(),
+            'antrian_menunggu' => $layanan->antrian()->where('status_antrian', 'menunggu')->whereDate('waktu_antrian', today())->count(),
+            'antrian_selesai' => $layanan->antrian()->where('status_antrian', 'selesai')->whereDate('waktu_antrian', today())->count(),
+            'antrian_batal' => $layanan->antrian()->where('status_antrian', 'batal')->whereDate('waktu_antrian', today())->count(),
             'total_loket' => $layanan->loket()->count(),
             'loket_aktif' => $layanan->loket()->where('status_loket', 'aktif')->count(),
         ];
 
-        // Antrian terbaru untuk layanan ini
+        // Antrian terbaru hari ini
         $antrian_terbaru = $layanan->antrian()
-            ->with('pengunjung')
-            ->whereDate('waktu_antrian', $today)
+            ->with(['pengunjung'])
+            ->whereDate('waktu_antrian', today())
             ->orderBy('waktu_antrian', 'desc')
             ->limit(10)
             ->get();
@@ -114,252 +107,176 @@ class LayananController extends Controller
         return view('layanan.show', compact('layanan', 'stats', 'antrian_terbaru'));
     }
 
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit($id)
+    public function edit(Layanan $layanan)
     {
-        $layanan = Layanan::findOrFail($id);
-        $admins = Admin::all();
+        $admins = Admin::orderBy('nama_admin', 'asc')->get();
         return view('layanan.edit', compact('layanan', 'admins'));
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, $id)
+    public function update(Request $request, Layanan $layanan)
     {
-        $layanan = Layanan::findOrFail($id);
-        
         $request->validate([
-            'nama_layanan' => 'required|max:100|unique:layanan,nama_layanan,' . $layanan->id_layanan . ',id_layanan',
-            'kode_layanan' => 'required|max:10|unique:layanan,kode_layanan,' . $layanan->id_layanan . ',id_layanan',
+            'nama_layanan' => 'required|string|max:100',
+            'kode_layanan' => 'required|string|max:10|unique:layanan,kode_layanan,' . $layanan->id_layanan . ',id_layanan',
             'estimasi_durasi_layanan' => 'required|integer|min:1|max:999',
             'kapasitas_harian' => 'required|integer|min:1|max:999',
-            'aktif' => 'boolean',
-            'id_admin' => 'nullable|exists:admin,id_admin'
-        ], [
-            'nama_layanan.required' => 'Nama layanan wajib diisi',
-            'nama_layanan.unique' => 'Nama layanan sudah ada',
-            'kode_layanan.required' => 'Kode layanan wajib diisi',
-            'kode_layanan.unique' => 'Kode layanan sudah digunakan',
-            'estimasi_durasi_layanan.required' => 'Estimasi durasi layanan wajib diisi',
-            'estimasi_durasi_layanan.integer' => 'Estimasi durasi harus berupa angka',
-            'estimasi_durasi_layanan.min' => 'Estimasi durasi minimal 1 menit',
-            'kapasitas_harian.required' => 'Kapasitas harian wajib diisi',
-            'kapasitas_harian.integer' => 'Kapasitas harian harus berupa angka',
+            'id_admin' => 'nullable|exists:admin,id_admin',
         ]);
 
-        $layanan->update([
-            'nama_layanan' => $request->nama_layanan,
-            'kode_layanan' => strtoupper($request->kode_layanan),
-            'estimasi_durasi_layanan' => $request->estimasi_durasi_layanan,
-            'kapasitas_harian' => $request->kapasitas_harian,
-            'aktif' => $request->has('aktif') ? true : false,
-            'id_admin' => $request->id_admin,
-        ]);
-
-        return redirect()->route('layanan.index')->with('success', 'Layanan berhasil diperbarui!');
-    }
-
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy($id)
-    {
-        $layanan = Layanan::findOrFail($id);
-        
-        // Cek apakah layanan memiliki antrian aktif
-        $hasActiveQueue = $layanan->antrian()
-            ->whereIn('status_antrian', ['menunggu', 'dipanggil'])
-            ->exists();
+        try {
+            $layanan->nama_layanan = trim($request->nama_layanan);
+            $layanan->kode_layanan = strtoupper(trim($request->kode_layanan));
+            $layanan->estimasi_durasi_layanan = $request->estimasi_durasi_layanan;
+            $layanan->kapasitas_harian = $request->kapasitas_harian;
+            $layanan->id_admin = $request->id_admin;
             
-        if ($hasActiveQueue) {
+            // PENTING: Update status aktif
+            $layanan->aktif = $request->has('aktif') ? 1 : 0;
+            
+            $layanan->save();
+
+            // Clear cache
+            $this->clearLayananCache();
+
+            // Log untuk debugging
+            Log::info('Layanan diupdate: ', [
+                'id' => $layanan->id_layanan,
+                'nama' => $layanan->nama_layanan,
+                'aktif' => $layanan->aktif
+            ]);
+
             return redirect()->route('layanan.index')
-                ->with('error', 'Tidak dapat menghapus layanan yang masih memiliki antrian aktif!');
+                ->with('success', 'Layanan "' . $layanan->nama_layanan . '" berhasil diperbarui');
+
+        } catch (\Exception $e) {
+            Log::error('Error updating layanan: ' . $e->getMessage());
+            
+            return back()->withInput()
+                ->with('error', 'Gagal memperbarui layanan: ' . $e->getMessage());
         }
-
-        // Cek apakah layanan memiliki loket
-        $hasLoket = $layanan->loket()->exists();
-        if ($hasLoket) {
-            return redirect()->route('layanan.index')
-                ->with('error', 'Tidak dapat menghapus layanan yang masih memiliki loket! Hapus loket terlebih dahulu.');
-        }
-
-        $layanan->delete();
-
-        return redirect()->route('layanan.index')->with('success', 'Layanan berhasil dihapus!');
     }
 
-    /**
-     * Toggle layanan status (aktif/tidak aktif)
-     */
-    public function toggleStatus($id)
+    public function toggleStatus(Layanan $layanan)
     {
-        $layanan = Layanan::findOrFail($id);
-        
-        // Jika akan dinonaktifkan, cek apakah ada antrian aktif
-        if ($layanan->aktif) {
-            $hasActiveQueue = $layanan->antrian()
-                ->whereIn('status_antrian', ['menunggu', 'dipanggil'])
-                ->exists();
-                
-            if ($hasActiveQueue) {
-                return back()->with('error', 'Tidak dapat menonaktifkan layanan yang masih memiliki antrian aktif!');
+        try {
+            $layanan->aktif = !$layanan->aktif;
+            $layanan->save();
+
+            // Clear cache
+            $this->clearLayananCache();
+
+            $status = $layanan->aktif ? 'diaktifkan' : 'dinonaktifkan';
+            
+            Log::info("Layanan {$status}: {$layanan->nama_layanan}");
+
+            return response()->json([
+                'success' => true,
+                'message' => "Layanan {$layanan->nama_layanan} berhasil {$status}",
+                'status' => $layanan->aktif
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error toggling layanan status: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mengubah status layanan'
+            ], 500);
+        }
+    }
+
+    public function destroy(Layanan $layanan)
+    {
+        try {
+            // Cek apakah ada antrian yang terkait
+            if ($layanan->antrian()->count() > 0) {
+                return back()->with('error', 'Tidak dapat menghapus layanan yang memiliki data antrian');
             }
+
+            $nama = $layanan->nama_layanan;
+            $layanan->delete();
+
+            // Clear cache
+            $this->clearLayananCache();
+
+            return redirect()->route('layanan.index')
+                ->with('success', 'Layanan "' . $nama . '" berhasil dihapus');
+
+        } catch (\Exception $e) {
+            Log::error('Error deleting layanan: ' . $e->getMessage());
+            
+            return back()->with('error', 'Gagal menghapus layanan: ' . $e->getMessage());
         }
-
-        $layanan->update(['aktif' => !$layanan->aktif]);
-
-        $status = $layanan->aktif ? 'diaktifkan' : 'dinonaktifkan';
-        return back()->with('success', "Layanan {$layanan->nama_layanan} berhasil {$status}!");
     }
 
-    /**
-     * Get layanan data for AJAX
-     */
-    public function getLayananData($id)
-    {
-        $layanan = Layanan::findOrFail($id);
-        return response()->json([
-            'id_layanan' => $layanan->id_layanan,
-            'nama_layanan' => $layanan->nama_layanan,
-            'kode_layanan' => $layanan->kode_layanan,
-            'estimasi_durasi_layanan' => $layanan->estimasi_durasi_layanan,
-            'kapasitas_harian' => $layanan->kapasitas_harian,
-            'aktif' => $layanan->aktif,
-        ]);
-    }
-
-    /**
-     * Bulk actions for multiple layanan
-     */
     public function bulkAction(Request $request)
     {
         $request->validate([
             'action' => 'required|in:activate,deactivate,delete',
-            'layanan_ids' => 'required|array|min:1',
+            'layanan_ids' => 'required|array',
             'layanan_ids.*' => 'exists:layanan,id_layanan'
         ]);
 
-        $layananIds = $request->layanan_ids;
-        $action = $request->action;
-        $processed = 0;
-        $errors = [];
+        try {
+            $layanans = Layanan::whereIn('id_layanan', $request->layanan_ids)->get();
+            $count = 0;
 
-        foreach ($layananIds as $id) {
-            $layanan = Layanan::find($id);
-            if (!$layanan) continue;
-
-            try {
-                switch ($action) {
+            foreach ($layanans as $layanan) {
+                switch ($request->action) {
                     case 'activate':
-                        $layanan->update(['aktif' => true]);
-                        $processed++;
+                        $layanan->aktif = true;
+                        $layanan->save();
+                        $count++;
                         break;
-                    
+
                     case 'deactivate':
-                        // Cek antrian aktif
-                        $hasActiveQueue = $layanan->antrian()
-                            ->whereIn('status_antrian', ['menunggu', 'dipanggil'])
-                            ->exists();
-                        
-                        if ($hasActiveQueue) {
-                            $errors[] = "Layanan {$layanan->nama_layanan} memiliki antrian aktif";
-                        } else {
-                            $layanan->update(['aktif' => false]);
-                            $processed++;
-                        }
+                        $layanan->aktif = false;
+                        $layanan->save();
+                        $count++;
                         break;
-                    
+
                     case 'delete':
-                        // Cek antrian aktif dan loket
-                        $hasActiveQueue = $layanan->antrian()
-                            ->whereIn('status_antrian', ['menunggu', 'dipanggil'])
-                            ->exists();
-                        $hasLoket = $layanan->loket()->exists();
-                        
-                        if ($hasActiveQueue) {
-                            $errors[] = "Layanan {$layanan->nama_layanan} memiliki antrian aktif";
-                        } elseif ($hasLoket) {
-                            $errors[] = "Layanan {$layanan->nama_layanan} masih memiliki loket";
-                        } else {
+                        if ($layanan->antrian()->count() == 0) {
                             $layanan->delete();
-                            $processed++;
+                            $count++;
                         }
                         break;
                 }
-            } catch (\Exception $e) {
-                $errors[] = "Gagal memproses layanan {$layanan->nama_layanan}: " . $e->getMessage();
             }
-        }
 
-        $message = "Berhasil memproses {$processed} layanan.";
-        if (!empty($errors)) {
-            $message .= " Errors: " . implode(', ', $errors);
-        }
+            // Clear cache
+            $this->clearLayananCache();
 
-        return back()->with($processed > 0 ? 'success' : 'error', $message);
+            $actionText = [
+                'activate' => 'diaktifkan',
+                'deactivate' => 'dinonaktifkan',
+                'delete' => 'dihapus'
+            ];
+
+            return redirect()->route('layanan.index')
+                ->with('success', "{$count} layanan berhasil {$actionText[$request->action]}");
+
+        } catch (\Exception $e) {
+            Log::error('Error bulk action layanan: ' . $e->getMessage());
+            
+            return back()->with('error', 'Gagal melakukan aksi bulk: ' . $e->getMessage());
+        }
+    }
+
+    public function export()
+    {
+        // Export functionality here
+        return response()->json(['message' => 'Export feature coming soon']);
     }
 
     /**
-     * Export layanan data
+     * Clear layanan related cache
      */
-    public function export(Request $request)
+    private function clearLayananCache()
     {
-        $query = Layanan::with('admin');
-
-        if ($request->filled('status')) {
-            if ($request->status == 'aktif') {
-                $query->where('aktif', true);
-            } elseif ($request->status == 'tidak_aktif') {
-                $query->where('aktif', false);
-            }
-        }
-
-        $layanans = $query->get();
-
-        $filename = 'layanan_' . date('Y-m-d_H-i-s') . '.csv';
-        
-        $headers = [
-            'Content-Type' => 'text/csv',
-            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
-        ];
-
-        $callback = function() use ($layanans) {
-            $file = fopen('php://output', 'w');
-            
-            // Header CSV
-            fputcsv($file, [
-                'ID',
-                'Nama Layanan',
-                'Kode Layanan', 
-                'Estimasi Durasi (menit)',
-                'Kapasitas Harian',
-                'Status',
-                'Admin',
-                'Dibuat',
-                'Diperbarui'
-            ]);
-            
-            // Data
-            foreach ($layanans as $layanan) {
-                fputcsv($file, [
-                    $layanan->id_layanan,
-                    $layanan->nama_layanan,
-                    $layanan->kode_layanan,
-                    $layanan->estimasi_durasi_layanan,
-                    $layanan->kapasitas_harian,
-                    $layanan->aktif ? 'Aktif' : 'Tidak Aktif',
-                    $layanan->admin ? $layanan->admin->nama_admin : '-',
-                    $layanan->created_at->format('d/m/Y H:i'),
-                    $layanan->updated_at->format('d/m/Y H:i')
-                ]);
-            }
-            
-            fclose($file);
-        };
-
-        return response()->stream($callback, 200, $headers);
+        Cache::forget('layanan_aktif');
+        Cache::forget('layanan_all');
+        Cache::forget('dashboard_stats');
+        Cache::forget('public_layanan');
     }
 }

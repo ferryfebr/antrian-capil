@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Log;
 
 class Layanan extends Model
 {
@@ -11,173 +12,192 @@ class Layanan extends Model
 
     protected $table = 'layanan';
     protected $primaryKey = 'id_layanan';
-
+    
     protected $fillable = [
         'nama_layanan',
-        'kode_layanan',
+        'kode_layanan', 
         'estimasi_durasi_layanan',
         'kapasitas_harian',
-        'aktif',
         'id_admin',
+        'aktif'
     ];
 
+    // PENTING: Cast ke tipe data yang benar
     protected $casts = [
         'aktif' => 'boolean',
         'estimasi_durasi_layanan' => 'integer',
         'kapasitas_harian' => 'integer',
+        'id_admin' => 'integer',
         'created_at' => 'datetime',
-        'updated_at' => 'datetime',
+        'updated_at' => 'datetime'
+    ];
+
+    // Default values
+    protected $attributes = [
+        'aktif' => true, // PENTING: Default aktif = true
     ];
 
     /**
-     * Relationship with Admin
-     * Layanan dimiliki oleh satu admin
+     * Relationships
      */
     public function admin()
     {
         return $this->belongsTo(Admin::class, 'id_admin', 'id_admin');
     }
 
-    /**
-     * Relationship with Loket
-     * Layanan dapat dilayani di banyak loket
-     */
+    public function antrian()
+    {
+        return $this->hasMany(Antrian::class, 'id_layanan', 'id_layanan');
+    }
+
     public function loket()
     {
         return $this->hasMany(Loket::class, 'id_layanan', 'id_layanan');
     }
 
     /**
-     * Relationship with Antrian
-     * Layanan dapat memiliki banyak antrian
+     * Scopes
      */
-    public function antrian()
-    {
-        return $this->hasMany(Antrian::class, 'id_layanan', 'id_layanan');
-    }
-
-    /**
-     * Scope untuk layanan aktif
-     */
-    public function scopeAktif($query)
+    public function scopeActive($query)
     {
         return $query->where('aktif', true);
     }
 
-    /**
-     * Scope untuk layanan tidak aktif
-     */
-    public function scopeTidakAktif($query)
+    public function scopeInactive($query)
     {
         return $query->where('aktif', false);
     }
 
-    /**
-     * Get layanan display name with code
-     */
-    public function getDisplayNameAttribute()
+    public function scopeByAdmin($query, $adminId)
     {
-        return $this->nama_layanan . ' (' . $this->kode_layanan . ')';
+        return $query->where('id_admin', $adminId);
+    }
+
+    public function scopeWithTodayQueue($query)
+    {
+        return $query->withCount(['antrian' => function($subQuery) {
+            $subQuery->whereDate('waktu_antrian', today());
+        }]);
     }
 
     /**
-     * Get total working hours needed per day
+     * Accessors & Mutators
      */
-    public function getTotalJamOperasiAttribute()
+    public function getKodeLayananAttribute($value)
     {
-        return ($this->estimasi_durasi_layanan * $this->kapasitas_harian) / 60;
+        return strtoupper($value);
+    }
+
+    public function setKodeLayananAttribute($value)
+    {
+        $this->attributes['kode_layanan'] = strtoupper(trim($value));
+    }
+
+    public function setNamaLayananAttribute($value)
+    {
+        $this->attributes['nama_layanan'] = ucwords(trim($value));
     }
 
     /**
-     * Get efficiency in work days (assuming 8 hours per day)
+     * Custom Methods
      */
-    public function getEfisiensiHariKerjaAttribute()
+    public function getTodayQueueCount()
     {
-        return $this->total_jam_operasi / 8;
-    }
-
-    /**
-     * Get antrian per hour capacity
-     */
-    public function getAntrianPerJamAttribute()
-    {
-        return $this->estimasi_durasi_layanan > 0 ? 60 / $this->estimasi_durasi_layanan : 0;
-    }
-
-    /**
-     * Check if layanan can be deleted
-     */
-    public function canBeDeleted()
-    {
-        // Cannot delete if has active queue
-        $hasActiveQueue = $this->antrian()
-            ->whereIn('status_antrian', ['menunggu', 'dipanggil'])
-            ->exists();
-        
-        // Cannot delete if has loket
-        $hasLoket = $this->loket()->exists();
-
-        return !$hasActiveQueue && !$hasLoket;
-    }
-
-    /**
-     * Get today's statistics
-     */
-    public function getTodayStatsAttribute()
-    {
-        $today = today();
-        
-        return [
-            'total_antrian' => $this->antrian()->whereDate('waktu_antrian', $today)->count(),
-            'menunggu' => $this->antrian()->whereDate('waktu_antrian', $today)->where('status_antrian', 'menunggu')->count(),
-            'dipanggil' => $this->antrian()->whereDate('waktu_antrian', $today)->where('status_antrian', 'dipanggil')->count(),
-            'selesai' => $this->antrian()->whereDate('waktu_antrian', $today)->where('status_antrian', 'selesai')->count(),
-            'batal' => $this->antrian()->whereDate('waktu_antrian', $today)->where('status_antrian', 'batal')->count(),
-        ];
-    }
-
-    /**
-     * Get utilization rate for today
-     */
-    public function getTodayUtilizationAttribute()
-    {
-        $todayTotal = $this->antrian()->whereDate('waktu_antrian', today())->count();
-        return $this->kapasitas_harian > 0 ? ($todayTotal / $this->kapasitas_harian) * 100 : 0;
-    }
-
-    /**
-     * Get completion rate for today
-     */
-    public function getTodayCompletionRateAttribute()
-    {
-        $stats = $this->today_stats;
-        return $stats['total_antrian'] > 0 ? ($stats['selesai'] / $stats['total_antrian']) * 100 : 0;
-    }
-
-    /**
-     * Get next queue number for this service
-     */
-    public function getNextQueueNumber()
-    {
-        $today = today();
-        $lastNumber = $this->antrian()
-            ->whereDate('waktu_antrian', $today)
+        return $this->antrian()
+            ->whereDate('waktu_antrian', today())
             ->count();
-        
-        return $this->kode_layanan . '-' . str_pad($lastNumber + 1, 3, '0', STR_PAD_LEFT);
     }
 
-    /**
-     * Calculate estimated waiting time
-     */
-    public function calculateEstimatedWaitTime()
+    public function getTodayCompletedCount()
     {
-        $today = today();
-        $waitingCount = $this->antrian()
-            ->whereDate('waktu_antrian', $today)
+        return $this->antrian()
+            ->whereDate('waktu_antrian', today())
+            ->where('status_antrian', 'selesai')
+            ->count();
+    }
+
+    public function getTodayWaitingCount()
+    {
+        return $this->antrian()
+            ->whereDate('waktu_antrian', today())
             ->where('status_antrian', 'menunggu')
             ->count();
+    }
+
+    public function getRemainingCapacity()
+    {
+        $todayCount = $this->getTodayQueueCount();
+        return max(0, $this->kapasitas_harian - $todayCount);
+    }
+
+    public function getUtilizationRate()
+    {
+        if ($this->kapasitas_harian <= 0) {
+            return 0;
+        }
+
+        $todayCount = $this->getTodayQueueCount();
+        return round(($todayCount / $this->kapasitas_harian) * 100, 2);
+    }
+
+    public function getCompletionRate()
+    {
+        $todayTotal = $this->getTodayQueueCount();
         
-        return now()->addMinutes($waitingCount * $this->estimasi_durasi_layanan);
+        if ($todayTotal <= 0) {
+            return 0;
+        }
+
+        $todayCompleted = $this->getTodayCompletedCount();
+        return round(($todayCompleted / $todayTotal) * 100, 2);
+    }
+
+    public function isAvailable()
+    {
+        return $this->aktif && $this->getRemainingCapacity() > 0;
+    }
+
+    public function getNextQueueNumber()
+    {
+        $count = $this->getTodayQueueCount();
+        $nextNumber = $count + 1;
+        
+        return $this->kode_layanan . '-' . str_pad($nextNumber, 3, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * Boot method untuk event handling
+     */
+    protected static function boot()
+    {
+        parent::boot();
+
+        // Event saat layanan dibuat
+        static::created(function ($layanan) {
+            \Log::info('Layanan created:', [
+                'id' => $layanan->id_layanan,
+                'nama' => $layanan->nama_layanan,
+                'kode' => $layanan->kode_layanan,
+                'aktif' => $layanan->aktif
+            ]);
+        });
+
+        // Event saat layanan diupdate
+        static::updated(function ($layanan) {
+            \Log::info('Layanan updated:', [
+                'id' => $layanan->id_layanan,
+                'nama' => $layanan->nama_layanan,
+                'aktif' => $layanan->aktif,
+                'changes' => $layanan->getChanges()
+            ]);
+        });
+
+        // Event saat layanan dihapus
+        static::deleted(function ($layanan) {
+            \Log::info('Layanan deleted:', [
+                'id' => $layanan->id_layanan,
+                'nama' => $layanan->nama_layanan
+            ]);
+        });
     }
 }

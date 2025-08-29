@@ -17,7 +17,7 @@
             font-family: 'Poppins', sans-serif;
             background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
             min-height: 100vh;
-            overflow: hidden;
+            /* REMOVED: overflow: hidden; - INI YANG MENYEBABKAN TIDAK BISA SCROLL */
         }
         
         .header {
@@ -25,7 +25,14 @@
             backdrop-filter: blur(10px);
             border-bottom: 3px solid #dc3545;
             box-shadow: 0 2px 20px rgba(0,0,0,0.1);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
         }
+        
+     
+        
+        
         
         .current-queue {
             background: linear-gradient(135deg, #dc3545, #c82333);
@@ -58,6 +65,27 @@
             border-radius: 15px;
             backdrop-filter: blur(10px);
             box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            max-height: 70vh; /* TAMBAHAN: Batas tinggi maksimal */
+            overflow-y: auto; /* TAMBAHAN: Scroll dalam container */
+        }
+        
+        /* TAMBAHAN: Custom scrollbar untuk waiting queue */
+        .waiting-queue::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .waiting-queue::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+        
+        .waiting-queue::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 10px;
+        }
+        
+        .waiting-queue::-webkit-scrollbar-thumb:hover {
+            background: #555;
         }
         
         .queue-item {
@@ -145,13 +173,45 @@
             padding: 3rem;
         }
         
+        /* TAMBAHAN: Scroll indicator untuk waiting queue */
+        .scroll-indicator {
+            position: absolute;
+            bottom: 10px;
+            right: 20px;
+            color: rgba(0,0,0,0.5);
+            font-size: 0.8rem;
+            animation: bounce 2s infinite;
+        }
+        
+        @keyframes bounce {
+            0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
+            40% { transform: translateY(-10px); }
+            60% { transform: translateY(-5px); }
+        }
+        
+        /* TAMBAHAN: Responsive adjustments */
         @media (max-width: 768px) {
             .queue-number { font-size: 2.5rem; }
             .current-queue { margin-bottom: 1rem; }
+            .back-button {
+                width: 45px;
+                height: 45px;
+                font-size: 1rem;
+            }
+            .waiting-queue {
+                max-height: 60vh;
+            }
+        }
+        
+        /* TAMBAHAN: Better spacing for content */
+        .main-content {
+            padding-bottom: 2rem;
         }
     </style>
 </head>
 <body>
+   
+
     <!-- Header -->
     <div class="header py-3">
         <div class="container-fluid">
@@ -171,6 +231,13 @@
                 </div>
                 <div class="col-md-4 text-end">
                     <div class="time-display text-primary" id="currentDateTime"></div>
+                    <!-- TAMBAHAN: Navigation menu -->
+                    <div class="btn-group btn-group-sm mt-2" role="group">
+                        <a href="{{ route('public.index') }}" class="btn btn-outline-primary">
+                            <i class="fas fa-home me-1"></i>Beranda
+                        </a>
+                        
+                    </div>
                 </div>
             </div>
         </div>
@@ -187,7 +254,7 @@
         </div>
     </div>
 
-    <div class="container-fluid py-4">
+    <div class="container-fluid py-4 main-content">
         <div class="row">
             <!-- Current Queue -->
             <div class="col-md-5 mb-4">
@@ -198,7 +265,7 @@
             
             <!-- Waiting Queue -->
             <div class="col-md-7">
-                <div class="waiting-queue p-4">
+                <div class="waiting-queue p-4 position-relative">
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <h5 class="text-primary mb-0">
                             <i class="fas fa-clock me-2"></i>Antrian Menunggu
@@ -208,6 +275,11 @@
                     
                     <div id="waitingQueueList">
                         <!-- Will be populated by JavaScript -->
+                    </div>
+                    
+                    <!-- TAMBAHAN: Scroll indicator -->
+                    <div class="scroll-indicator" id="scrollIndicator" style="display: none;">
+                        <i class="fas fa-arrow-down"></i> Scroll untuk melihat lebih banyak
                     </div>
                 </div>
             </div>
@@ -265,6 +337,10 @@
     <script>
         let lastCalledQueue = null;
         let isFirstLoad = true;
+
+       
+
+        
 
         // Update current date and time
         function updateDateTime() {
@@ -360,6 +436,7 @@
         function updateWaitingQueue(waitingQueues) {
             const list = document.getElementById('waitingQueueList');
             const count = document.getElementById('waitingCount');
+            const scrollIndicator = document.getElementById('scrollIndicator');
             
             count.textContent = waitingQueues.length;
 
@@ -403,6 +480,14 @@
                 }
                 
                 list.innerHTML = html;
+                
+                // TAMBAHAN: Show scroll indicator if content overflows
+                const waitingQueueContainer = document.querySelector('.waiting-queue');
+                if (waitingQueueContainer.scrollHeight > waitingQueueContainer.clientHeight) {
+                    scrollIndicator.style.display = 'block';
+                } else {
+                    scrollIndicator.style.display = 'none';
+                }
             } else {
                 list.innerHTML = `
                     <div class="text-center py-4">
@@ -411,6 +496,7 @@
                         <p class="text-muted">Tidak ada antrian yang menunggu saat ini</p>
                     </div>
                 `;
+                scrollIndicator.style.display = 'none';
             }
         }
 
@@ -454,6 +540,19 @@
             }
         });
 
+        // TAMBAHAN: Keyboard shortcuts
+        document.addEventListener('keydown', function(e) {
+            // ESC key to go back
+            if (e.key === 'Escape') {
+                goBack();
+            }
+            // F11 for fullscreen
+            if (e.key === 'F11') {
+                e.preventDefault();
+                toggleFullscreen();
+            }
+        });
+
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
             updateDateTime();
@@ -486,14 +585,23 @@
             console.log('Connection lost');
         });
 
-        // Prevent right-click and shortcuts for kiosk mode
-        document.addEventListener('contextmenu', e => e.preventDefault());
-        document.addEventListener('keydown', function(e) {
-            // Disable F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+U
-            if (e.keyCode === 123 || 
-                (e.ctrlKey && e.shiftKey && (e.keyCode === 73 || e.keyCode === 74)) || 
-                (e.ctrlKey && e.keyCode === 85)) {
+        // MODIFIED: Remove some restrictions for better UX in normal browser mode
+        // Only prevent right-click in fullscreen
+        document.addEventListener('contextmenu', function(e) {
+            if (document.fullscreenElement) {
                 e.preventDefault();
+            }
+        });
+
+        // Only disable dev tools shortcuts in fullscreen
+        document.addEventListener('keydown', function(e) {
+            if (document.fullscreenElement) {
+                // Disable F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+U in fullscreen
+                if (e.keyCode === 123 || 
+                    (e.ctrlKey && e.shiftKey && (e.keyCode === 73 || e.keyCode === 74)) || 
+                    (e.ctrlKey && e.keyCode === 85)) {
+                    e.preventDefault();
+                }
             }
         });
     </script>

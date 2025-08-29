@@ -3,6 +3,7 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\DB;
 
 return new class extends Migration
 {
@@ -11,18 +12,13 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('layanan', function (Blueprint $table) {
-            $table->id('id_layanan');
-            $table->string('nama_layanan', 100);
-            $table->string('kode_layanan', 10);
-            $table->integer('estimasi_durasi_layanan')->default(30)->comment('dalam menit');
-            $table->integer('kapasitas_harian')->default(50);
-            $table->boolean('aktif')->default(true);
-            $table->unsignedBigInteger('id_admin')->nullable();
-            $table->timestamps();
-            
-            $table->foreign('id_admin')->references('id_admin')->on('admin');
+        Schema::table('layanan', function (Blueprint $table) {
+            // PERBAIKAN: Set default value untuk kolom aktif
+            $table->boolean('aktif')->default(true)->change();
         });
+
+        // Update existing records yang mungkin null
+        DB::table('layanan')->whereNull('aktif')->update(['aktif' => true]);
     }
 
     /**
@@ -30,6 +26,8 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('layanan');
+        Schema::table('layanan', function (Blueprint $table) {
+            $table->boolean('aktif')->default(false)->change();
+        });
     }
 };
