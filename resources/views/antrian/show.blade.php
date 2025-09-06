@@ -218,6 +218,56 @@
                                 <div class="timeline-content">
                                     <h6 class="mb-1">Antrian Dibuat</h6>
                                     <p class="mb-1">{{ $antrian->waktu_antrian->format('d F Y, H:i:s') }}</p>
+                                    <small class="text-muted">{{ $antrian->waktu_antrian->diffForHumans() }}</small>
+                                </div>
+                            </div>
+                            
+                            @if($antrian->waktu_estimasi)
+                            <div class="timeline-item">
+                                <div class="timeline-marker bg-info"></div>
+                                <div class="timeline-content">
+                                    <h6 class="mb-1">Estimasi Dipanggil</h6>
+                                    <p class="mb-1">{{ $antrian->waktu_estimasi->format('d F Y, H:i') }}</p>
+                                    <small class="text-muted">
+                                        @if($antrian->waktu_estimasi > now())
+                                            {{ $antrian->waktu_estimasi->diffForHumans() }}
+                                        @else
+                                            {{ $antrian->waktu_estimasi->diffForHumans() }} (terlewat)
+                                        @endif
+                                    </small>
+                                </div>
+                            </div>
+                            @endif
+                            
+                            @if($antrian->waktu_dipanggil)
+                            <div class="timeline-item">
+                                <div class="timeline-marker bg-primary"></div>
+                                <div class="timeline-content">
+                                    <h6 class="mb-1">Dipanggil</h6>
+                                    <p class="mb-1">{{ $antrian->waktu_dipanggil->format('d F Y, H:i:s') }}</p>
+                                    <small class="text-muted">{{ $antrian->waktu_dipanggil->diffForHumans() }}</small>
+                                    @if($antrian->admin)
+                                        <br><small class="text-muted">oleh {{ $antrian->admin->nama_admin }}</small>
+                                    @endif
+                                </div>
+                            </div>
+                            @endif
+                            
+                            @if($antrian->status_antrian == 'selesai')
+                            <div class="timeline-item">
+                                <div class="timeline-marker bg-success"></div>
+                                <div class="timeline-content">
+                                    <h6 class="mb-1">Selesai</h6>
+                                    <p class="mb-1">{{ $antrian->updated_at->format('d F Y, H:i:s') }}</p>
+                                    <small class="text-muted">{{ $antrian->updated_at->diffForHumans() }}</small>
+                                </div>
+                            </div>
+                            @elseif($antrian->status_antrian == 'batal')
+                            <div class="timeline-item">
+                                <div class="timeline-marker bg-danger"></div>
+                                <div class="timeline-content">
+                                    <h6 class="mb-1">Dibatalkan</h6>
+                                    <p class="mb-1">{{ $antrian->updated_at->format('d F Y, H:i:s') }}</p>
                                     <small class="text-muted">{{ $antrian->updated_at->diffForHumans() }}</small>
                                 </div>
                             </div>
@@ -645,54 +695,4 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 </script>
-@endpushuted">{{ $antrian->waktu_antrian->diffForHumans() }}</small>
-                                </div>
-                            </div>
-                            
-                            @if($antrian->waktu_estimasi)
-                            <div class="timeline-item">
-                                <div class="timeline-marker bg-info"></div>
-                                <div class="timeline-content">
-                                    <h6 class="mb-1">Estimasi Dipanggil</h6>
-                                    <p class="mb-1">{{ $antrian->waktu_estimasi->format('d F Y, H:i') }}</p>
-                                    <small class="text-muted">
-                                        @if($antrian->waktu_estimasi > now())
-                                            {{ $antrian->waktu_estimasi->diffForHumans() }}
-                                        @else
-                                            {{ $antrian->waktu_estimasi->diffForHumans() }} (terlewat)
-                                        @endif
-                                    </small>
-                                </div>
-                            </div>
-                            @endif
-                            
-                            @if($antrian->waktu_dipanggil)
-                            <div class="timeline-item">
-                                <div class="timeline-marker bg-primary"></div>
-                                <div class="timeline-content">
-                                    <h6 class="mb-1">Dipanggil</h6>
-                                    <p class="mb-1">{{ $antrian->waktu_dipanggil->format('d F Y, H:i:s') }}</p>
-                                    <small class="text-muted">{{ $antrian->waktu_dipanggil->diffForHumans() }}</small>
-                                    @if($antrian->admin)
-                                        <br><small class="text-muted">oleh {{ $antrian->admin->nama_admin }}</small>
-                                    @endif
-                                </div>
-                            </div>
-                            @endif
-                            
-                            @if($antrian->status_antrian == 'selesai')
-                            <div class="timeline-item">
-                                <div class="timeline-marker bg-success"></div>
-                                <div class="timeline-content">
-                                    <h6 class="mb-1">Selesai</h6>
-                                    <p class="mb-1">{{ $antrian->updated_at->format('d F Y, H:i:s') }}</p>
-                                    <small class="text-muted">{{ $antrian->updated_at->diffForHumans() }}</small>
-                                </div>
-                            </div>
-                            @elseif($antrian->status_antrian == 'batal')
-                            <div class="timeline-item">
-                                <div class="timeline-marker bg-danger"></div>
-                                <div class="timeline-content">
-                                    <h6 class="mb-1">Dibatalkan</h6>
-                                    <p class="mb-1">{{ $antrian->updated_at->format('d F Y, H:i:s') }}</p>
-                                    <small class="text-m
+@endpush

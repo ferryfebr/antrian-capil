@@ -9,7 +9,7 @@ use App\Models\Admin;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log; // Pastikan ini ada
+use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 
 class AntrianController extends Controller
@@ -97,14 +97,15 @@ class AntrianController extends Controller
         DB::beginTransaction();
         
         try {
-            // Create or update pengunjung
-            $pengunjung = Pengunjung::createOrUpdateByNik([
-                'nik' => $request->nik,
-                'nama_pengunjung' => $request->nama_pengunjung,
-                'no_hp' => $request->no_hp
-            ]);
+            // Get layanan first to validate
+            $layanan = Layanan::where('id_layanan', $request->id_layanan)
+                             ->where('aktif', true)
+                             ->first();
 
-            $layanan = Layanan::findOrFail($request->id_layanan);
+            if (!$layanan) {
+                return back()->withErrors(['id_layanan' => 'Layanan tidak ditemukan atau tidak aktif!'])
+                           ->withInput();
+            }
 
             // Check daily capacity
             $todayCount = Antrian::whereDate('waktu_antrian', today())
@@ -116,11 +117,22 @@ class AntrianController extends Controller
                            ->withInput();
             }
 
-            // Generate nomor antrian
-            $nomorAntrian = Antrian::generateQueueNumber($request->id_layanan);
+            // Create or update pengunjung
+            $pengunjung = Pengunjung::createOrUpdateByNik([
+                'nik' => $request->nik,
+                'nama_pengunjung' => $request->nama_pengunjung,
+                'no_hp' => $request->no_hp
+            ]);
 
-            // Calculate estimated time
-            $waktuEstimasi = $layanan->calculateEstimatedWaitTime();
+            if (!$pengunjung) {
+                throw new \Exception('Gagal membuat atau memperbarui data pengunjung');
+            }
+
+            // Generate nomor antrian
+            $nomorAntrian = $this->generateQueueNumber($request->id_layanan);
+
+            // Calculate estimated time (simple calculation)
+            $waktuEstimasi = $this->calculateEstimatedWaitTime($layanan);
 
             // Create antrian
             $antrian = Antrian::create([
@@ -130,17 +142,22 @@ class AntrianController extends Controller
                 'waktu_estimasi' => $waktuEstimasi,
                 'id_pengunjung' => $pengunjung->id_pengunjung,
                 'id_layanan' => $request->id_layanan,
+                'id_admin' => Auth::guard('admin')->id(), // Set admin yang membuat
             ]);
+
+            if (!$antrian) {
+                throw new \Exception('Gagal membuat antrian');
+            }
 
             DB::commit();
 
-            // Log activity - FIXED: Gunakan Log facade yang sudah diimport
-            Log::info('New queue created', [
+            // Log activity
+            Log::info('New queue created by admin', [
                 'antrian_id' => $antrian->id_antrian,
                 'nomor_antrian' => $nomorAntrian,
                 'pengunjung_nik' => $pengunjung->nik,
                 'layanan' => $layanan->nama_layanan,
-                'created_by_admin' => Auth::guard('admin')->check()
+                'created_by_admin' => Auth::guard('admin')->user()->nama_admin
             ]);
 
             return redirect()->route('antrian.show', $antrian->id_antrian)
@@ -149,14 +166,68 @@ class AntrianController extends Controller
         } catch (\Exception $e) {
             DB::rollback();
             
-            // FIXED: Gunakan Log facade yang sudah diimport
             Log::error('Failed to create queue', [
                 'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
                 'data' => $request->except('password')
             ]);
 
-            return back()->withErrors(['error' => 'Gagal membuat antrian. Silakan coba lagi.'])
+            return back()->withErrors(['error' => 'Gagal membuat antrian: ' . $e->getMessage()])
                         ->withInput();
+        }
+    }
+
+    /**
+     * Generate queue number for specific service
+     */
+    private function generateQueueNumber($layananId)
+    {
+        try {
+            $layanan = Layanan::findOrFail($layananId);
+            
+            // Get today's queue count for this service
+            $todayCount = Antrian::whereDate('waktu_antrian', today())
+                ->where('id_layanan', $layananId)
+                ->count();
+
+            $nextNumber = $todayCount + 1;
+            $queueNumber = $layanan->kode_layanan . '-' . str_pad($nextNumber, 3, '0', STR_PAD_LEFT);
+
+            // Ensure unique queue number for today
+            while (Antrian::where('nomor_antrian', $queueNumber)
+                          ->whereDate('waktu_antrian', today())
+                          ->exists()) {
+                $nextNumber++;
+                $queueNumber = $layanan->kode_layanan . '-' . str_pad($nextNumber, 3, '0', STR_PAD_LEFT);
+            }
+
+            return $queueNumber;
+        } catch (\Exception $e) {
+            Log::error('Error generating queue number: ' . $e->getMessage());
+            throw new \Exception('Gagal generate nomor antrian');
+        }
+    }
+
+    /**
+     * Calculate estimated wait time
+     */
+    private function calculateEstimatedWaitTime($layanan)
+    {
+        try {
+            // Get current waiting queues for this service
+            $waitingCount = Antrian::where('id_layanan', $layanan->id_layanan)
+                ->whereDate('waktu_antrian', today())
+                ->where('status_antrian', 'menunggu')
+                ->count();
+
+            // Calculate estimated time based on service duration and waiting queue
+            $estimatedMinutes = $waitingCount * $layanan->estimasi_durasi_layanan;
+            
+            return now()->addMinutes($estimatedMinutes);
+        } catch (\Exception $e) {
+            Log::error('Error calculating estimated time: ' . $e->getMessage());
+            // Return current time + default duration if calculation fails
+            return now()->addMinutes($layanan->estimasi_durasi_layanan ?? 30);
         }
     }
 
@@ -230,10 +301,10 @@ class AntrianController extends Controller
                 $newLayanan = Layanan::findOrFail($request->id_layanan);
                 
                 // Generate new queue number
-                $nomorAntrian = Antrian::generateQueueNumber($request->id_layanan);
+                $nomorAntrian = $this->generateQueueNumber($request->id_layanan);
                 
                 // Calculate new estimated time
-                $waktuEstimasi = $newLayanan->calculateEstimatedWaitTime();
+                $waktuEstimasi = $this->calculateEstimatedWaitTime($newLayanan);
 
                 $antrian->update([
                     'nomor_antrian' => $nomorAntrian,
@@ -302,7 +373,6 @@ class AntrianController extends Controller
                     return back()->with('error', 'Status tidak valid');
             }
 
-            // Log status change - FIXED: Gunakan Log facade yang sudah diimport
             Log::info('Queue status updated', [
                 'antrian_id' => $antrian->id_antrian,
                 'nomor_antrian' => $antrian->nomor_antrian,
@@ -314,7 +384,6 @@ class AntrianController extends Controller
             return back()->with('success', $message);
 
         } catch (\Exception $e) {
-            // FIXED: Gunakan Log facade yang sudah diimport
             Log::error('Failed to update queue status', [
                 'error' => $e->getMessage(),
                 'antrian_id' => $id,
@@ -336,7 +405,6 @@ class AntrianController extends Controller
             $nomorAntrian = $antrian->nomor_antrian;
             $antrian->delete();
 
-            // FIXED: Gunakan Log facade yang sudah diimport
             Log::info('Queue deleted', [
                 'antrian_id' => $id,
                 'nomor_antrian' => $nomorAntrian,
@@ -347,7 +415,6 @@ class AntrianController extends Controller
                 ->with('success', "Antrian {$nomorAntrian} berhasil dihapus!");
 
         } catch (\Exception $e) {
-            // FIXED: Gunakan Log facade yang sudah diimport
             Log::error('Failed to delete queue', [
                 'error' => $e->getMessage(),
                 'antrian_id' => $id

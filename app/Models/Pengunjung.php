@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
 
 class Pengunjung extends Model
 {
@@ -137,20 +138,20 @@ class Pengunjung extends Model
      * Get favorite services
      */
     public function getFavoriteServicesAttribute()
-{
-    return $this->antrian()
-        ->select('id_layanan', \Illuminate\Support\Facades\DB::raw('count(*) as total'))
-        ->with('layanan')
-        ->groupBy('id_layanan')
-        ->orderByDesc('total')
-        ->get()
-        ->map(function ($item) {
-            return [
-                'layanan' => $item->layanan,
-                'count' => $item->total
-            ];
-        });
-}
+    {
+        return $this->antrian()
+            ->select('id_layanan', \Illuminate\Support\Facades\DB::raw('count(*) as total'))
+            ->with('layanan')
+            ->groupBy('id_layanan')
+            ->orderByDesc('total')
+            ->get()
+            ->map(function ($item) {
+                return [
+                    'layanan' => $item->layanan,
+                    'count' => $item->total
+                ];
+            });
+    }
 
     /**
      * Get current active queues
@@ -267,29 +268,110 @@ class Pengunjung extends Model
     }
 
     /**
-     * Create or update pengunjung data
+     * Create or update pengunjung data - FIXED VERSION
      */
     public static function createOrUpdateByNik($data)
     {
-        $pengunjung = self::where('nik', $data['nik'])->first();
-        
-        if ($pengunjung) {
-            // Update existing data if needed
-            if (isset($data['nama_pengunjung']) && $data['nama_pengunjung'] !== $pengunjung->nama_pengunjung) {
-                $pengunjung->nama_pengunjung = $data['nama_pengunjung'];
+        try {
+            // Validate required data
+            if (empty($data['nik']) || empty($data['nama_pengunjung'])) {
+                throw new \Exception('NIK dan nama pengunjung wajib diisi');
+            }
+
+            // Clean NIK
+            $data['nik'] = preg_replace('/\D/', '', $data['nik']);
+            
+            // Validate NIK length
+            if (strlen($data['nik']) !== 16) {
+                throw new \Exception('NIK harus 16 digit');
+            }
+
+            // Clean nama
+            $data['nama_pengunjung'] = ucwords(strtolower(trim($data['nama_pengunjung'])));
+
+            // Clean no_hp if provided
+            if (!empty($data['no_hp'])) {
+                $data['no_hp'] = preg_replace('/[^\d+]/', '', $data['no_hp']);
+            } else {
+                $data['no_hp'] = null;
+            }
+
+            // Find existing pengunjung
+            $pengunjung = self::where('nik', $data['nik'])->first();
+            
+            if ($pengunjung) {
+                // Update existing data if there are changes
+                $updated = false;
+                
+                if ($data['nama_pengunjung'] !== $pengunjung->nama_pengunjung) {
+                    $pengunjung->nama_pengunjung = $data['nama_pengunjung'];
+                    $updated = true;
+                }
+                
+                if ($data['no_hp'] !== $pengunjung->no_hp) {
+                    $pengunjung->no_hp = $data['no_hp'];
+                    $updated = true;
+                }
+                
+                if ($updated) {
+                    $pengunjung->save();
+                    Log::info('Pengunjung updated', [
+                        'id' => $pengunjung->id_pengunjung,
+                        'nik' => $pengunjung->nik,
+                        'nama' => $pengunjung->nama_pengunjung
+                    ]);
+                }
+            } else {
+                // Create new pengunjung
+                $data['waktu_daftar'] = now();
+                $pengunjung = self::create($data);
+                
+                if (!$pengunjung) {
+                    throw new \Exception('Gagal membuat data pengunjung baru');
+                }
+                
+                Log::info('New pengunjung created', [
+                    'id' => $pengunjung->id_pengunjung,
+                    'nik' => $pengunjung->nik,
+                    'nama' => $pengunjung->nama_pengunjung
+                ]);
             }
             
-            if (isset($data['no_hp']) && $data['no_hp'] !== $pengunjung->no_hp) {
-                $pengunjung->no_hp = $data['no_hp'];
-            }
+            return $pengunjung;
             
-            $pengunjung->save();
-        } else {
-            // Create new pengunjung
-            $data['waktu_daftar'] = now();
-            $pengunjung = self::create($data);
+        } catch (\Exception $e) {
+            Log::error('Error in createOrUpdateByNik', [
+                'error' => $e->getMessage(),
+                'data' => $data
+            ]);
+            throw $e;
         }
-        
-        return $pengunjung;
+    }
+
+    /**
+     * Boot method untuk event handling
+     */
+    protected static function boot()
+    {
+        parent::boot();
+
+        // Event saat pengunjung dibuat
+        static::created(function ($pengunjung) {
+            Log::info('Pengunjung created', [
+                'id' => $pengunjung->id_pengunjung,
+                'nik' => $pengunjung->nik,
+                'nama' => $pengunjung->nama_pengunjung,
+                'waktu_daftar' => $pengunjung->waktu_daftar
+            ]);
+        });
+
+        // Event saat pengunjung diupdate
+        static::updated(function ($pengunjung) {
+            Log::info('Pengunjung updated', [
+                'id' => $pengunjung->id_pengunjung,
+                'nik' => $pengunjung->nik,
+                'changes' => $pengunjung->getChanges()
+            ]);
+        });
     }
 }
